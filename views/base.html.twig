@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% block head %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>{{ title }}</title>
+
+    <link rel="stylesheet" href="/assets/bootstrap/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/assets/bootstrap/css/app.css">
+    {% endblock %}
+</head>
+
+<body>
+
+<nav class="navbar navbar-dark bg-dark">
+    <div class="container">
+        {% block navigation %}
+        <ul class="list-unstyled d-flex justify-content-end">
+            <li>
+                <a class="navbar-brand" href="/">
+                    DMS
+                </a>
+            </li>
+            <li>
+                <a class="navbar-brand" href="/documents">
+                    Documents
+                </a>
+            </li>
+        </ul>
+        {% endblock %}
+    </div>
+</nav>
+
+<main class="container py-5">
+    {% block content %}{% endblock %}
+</main>
+
+<script src="/assets/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/assets/bootstrap/js/app.js"></script>
+
+</body>
+</html>
