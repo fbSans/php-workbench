@@ -5,6 +5,9 @@ require_once dirname(__DIR__) . '/vendor/autoload.php';
 require_once dirname(__DIR__) . '/routes/web.php';
 
 use Routes\Route;
+use Init\Init;
+
+Init::init();
 
 // Dispatch the current request.
 $response = Route::dispatch(

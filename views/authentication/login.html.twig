@@ -1,0 +1,35 @@
+{% extends "base.html.twig" %}
+
+{% block navigation %}
+    <nav class="navbar">
+        <div class="">
+            <img src="assets/images/dms-logo.png" alt="logo" class="rouded-2" style="width: 100px; height: 60px;">
+        </div>
+        <div class="row mx-3" style="box-sizing: border-box;">
+            <p class="navbar-text text-white fs-1 mb-0">{{"Document Management System" |title}}</p>
+            <p class="text-white text-opacity-75 mt-0">{{"A platform for internal usage"}}</p>
+        </div>
+    </nav>
+{% endblock %}
+
+{% block content %}
+    <div class="container align-items-center" >
+        <div class="align-center">
+            <h2 class="mb-4 fs-1 text-white">Login</h2>
+            <form action="/login" method="post" class="w-50">
+                <div class="input-group mb-4">
+                    <label for="email input-group-text " class="input-group-text">Email</label>
+                    <input id="email" name="email" type="text" class="form-control">
+                </div>
+                <div class="input-group mb-4">
+                    <label for="password" class="input-group-text">Password</label>
+                    <input id="password" name="password" type="password" class="form-control">
+                </div>
+                <button class="btn btn-primary">Login</button>
+                {% if errors and errors['message'] %}
+                    <p class="text-warning">{{ errors['message']  }}</p>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+{% endblock %}

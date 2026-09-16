@@ -21,7 +21,7 @@ class View
         if (static::$twig === null) {
             throw new \RuntimeException('View system has not been initialized.');
         }
-
+    
         return static::$twig->render($template, $data);
     }
 }
