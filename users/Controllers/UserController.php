@@ -31,17 +31,19 @@ class UserController {
             $context['errors']['message'] = 'Invalid format for email. got "' . escape_html($email) . '"';
         } else {
             $page = 1;
-            $user = User::fetchPage($page, 1, ['email'=> $email])[0];
+            $user = User::fetchPage($page, 1, ['email'=> $email])['items'][0];
+            
             if(!$user){
                 $context['errors']['message'] = 'Invalid email or password';
             }
-
+                
+                
             $verified = true;
-            if(!$user->password !== ''){
-                if(!password_verify($request->input('password'), $user->pasword)) {
-                    $context['errors']['message'] = 'Invalid email or password';
-                    $verified = false;
-                }
+           
+            
+            if(!password_verify($request->input('password'), $user->password)) {
+                $context['errors']['message'] = 'Invalid email or password';
+                $verified = false;
             } 
         }
 
@@ -57,5 +59,14 @@ class UserController {
             header('Location: /login');
             exit();
         }
+    }
+
+    public function logout()
+    {
+        var_dump($_SESSION);
+        session_unset();
+        session_abort();
+        header('Location: /login');
+        exit;
     }
 }
