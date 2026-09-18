@@ -271,7 +271,7 @@ abstract class Model
             if (count($condition) !== 2) {
                 throw new \InvalidArgumentException(
                     "WHERE condition for '$column' " .
-                    "must contain operator and value."
+                        "must contain operator and value."
                 );
             }
 
@@ -340,8 +340,8 @@ abstract class Model
                 if ($value === []) {
                     $parts[] =
                         $operator === 'IN'
-                            ? '0'
-                            : '1';
+                        ? '0'
+                        : '1';
 
                     continue;
                 }
@@ -352,7 +352,7 @@ abstract class Model
                     if ($item === null) {
                         throw new \InvalidArgumentException(
                             "$operator cannot contain NULL. " .
-                            "Use IS NULL separately."
+                                "Use IS NULL separately."
                         );
                     }
 
@@ -403,7 +403,7 @@ abstract class Model
 
                 throw new \InvalidArgumentException(
                     "NULL cannot be used with " .
-                    "WHERE operator {$operator}."
+                        "WHERE operator {$operator}."
                 );
             }
 
@@ -506,8 +506,8 @@ abstract class Model
         }
 
         $columns = array_map(
-            fn (string $column): string =>
-                static::validateColumn($column),
+            fn(string $column): string =>
+            static::validateColumn($column),
             $groupBy
         );
 
@@ -766,10 +766,10 @@ abstract class Model
 
         $totalPages =
             $totalItems === 0
-                ? 0
-                : (int) ceil(
-                    $totalItems / $pageSize
-                );
+            ? 0
+            : (int) ceil(
+                $totalItems / $pageSize
+            );
 
         /*
          * Move an out-of-range page to the last page.
@@ -851,8 +851,8 @@ abstract class Model
             $items = $rows;
         } else {
             $items = array_map(
-                fn (array $row): static =>
-                    static::hydrate($row),
+                fn(array $row): static =>
+                static::hydrate($row),
                 $rows
             );
         }
@@ -923,10 +923,10 @@ abstract class Model
             return implode(
                 ' AND ',
                 array_map(
-                    fn ($column) =>
-                        static::validateColumn(
-                            $column
-                        ) .
+                    fn($column) =>
+                    static::validateColumn(
+                        $column
+                    ) .
                         " = :$column",
                     $pk
                 )
@@ -979,7 +979,7 @@ abstract class Model
             array_keys($attributes);
 
         $placeholders = array_map(
-            fn ($column) => ':' . $column,
+            fn($column) => ':' . $column,
             $columns
         );
 
@@ -1018,6 +1018,25 @@ abstract class Model
         }
 
         return $success;
+    }
+
+    public static function get(array $conditions = []): array
+    {
+        $where = static::buildWhere($conditions);
+
+        $sql = 'SELECT * FROM ' . static::table();
+
+        if ($where['sql'] !== '') {
+            $sql .= ' WHERE ' . $where['sql'];
+        }
+
+        $stmt = static::connection()->prepare($sql);
+        $stmt->execute($where['params']);
+
+        return array_map(
+            fn(array $row) => static::hydrate($row),
+            $stmt->fetchAll(\PDO::FETCH_ASSOC)
+        );
     }
 
     public static function createOne(
@@ -1059,10 +1078,10 @@ abstract class Model
         $setStr = implode(
             ', ',
             array_map(
-                fn ($column) =>
-                    static::validateColumn(
-                        $column
-                    ) .
+                fn($column) =>
+                static::validateColumn(
+                    $column
+                ) .
                     " = :$column",
                 array_keys($attributes)
             )
@@ -1109,4 +1128,3 @@ abstract class Model
         );
     }
 }
-
