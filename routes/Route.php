@@ -2,46 +2,105 @@
 
 namespace Routes;
 
+use Base\MiddlewarePipeline;
+use Base\Request;
+use Base\Response;
+
 final class Route
 {
     private static array $routes = [];
 
+    private string $method;
+    private string $uri;
+    private mixed $action;
+    private array $middlewares = [];
+
+    public function __construct(
+        string $method,
+        string $uri,
+        mixed $action
+    ) {
+        $this->method = strtoupper($method);
+        $this->uri = $uri;
+        $this->action = $action;
+    }
+
+    public function middleware(string ...$middleware): static
+    {
+        $this->middlewares = [
+            ...$this->middlewares,
+            ...$middleware,
+        ];
+
+        return $this;
+    }
+
+    public function method(): string
+    {
+        return $this->method;
+    }
+
+    public function uri(): string
+    {
+        return $this->uri;
+    }
+
+    public function action(): mixed
+    {
+        return $this->action;
+    }
+
+    public function middlewares(): array
+    {
+        return $this->middlewares;
+    }
+
     public static function get(
         string $uri,
         mixed $action
-    ): void {
-        self::add('GET', $uri, $action);
+    ): static {
+        return self::add('GET', $uri, $action);
     }
 
     public static function post(
         string $uri,
         mixed $action
-    ): void {
-        self::add('POST', $uri, $action);
+    ): static {
+        return self::add('POST', $uri, $action);
     }
 
     private static function add(
         string $method,
         string $uri,
         mixed $action
-    ): void {
-        self::$routes[] = [
-            'method' => $method,
-            'uri' => $uri,
-            'action' => $action,
-        ];
+    ): static {
+        $route = new static($method, $uri, $action);
+
+        self::$routes[] = $route;
+
+        return $route;
+    }
+
+    public function run(array $params): Response
+    {
+        $request = new Request();
+        $pipeline = new MiddlewarePipeline($this->resolveMiddlewares());
+
+        return $pipeline->handle($request, function (Request $request) use ($params) {
+            return $this->invoke($this->action, $params, $request);
+        });
     }
 
     public static function dispatch(
         string $method,
         string $uri
-    ): mixed {
+    ): Response|null {
         foreach (self::$routes as $route) {
-            if ($route['method'] !== strtoupper($method)) {
+            if ($route->method() !== strtoupper($method)) {
                 continue;
             }
 
-            $pattern = self::compile($route['uri']);
+            $pattern = self::compile($route->uri());
 
             if (preg_match($pattern, $uri, $matches) !== 1) {
                 continue;
@@ -53,11 +112,11 @@ final class Route
             // Keep only named captures.
             $params = array_filter(
                 $matches,
-                fn ($key) => is_string($key),
+                fn($key) => is_string($key),
                 ARRAY_FILTER_USE_KEY
             );
 
-            return self::invoke($route['action'], $params);
+            return $route->run($params);
         }
 
         return null;
@@ -76,14 +135,14 @@ final class Route
 
         $pattern = preg_replace_callback(
             '/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/',
-            fn ($match) => '(?P<' . $match[1] . '>[^/]+)',
+            fn($match) => '(?P<' . $match[1] . '>[^/]+)',
             $uri
         );
 
         return '~^' . $pattern . '$~';
     }
 
-    private static function invoke(mixed $action, array $params): mixed 
+    private function invoke(mixed $action, array $params, Request $request): Response
     {
         /*
          * Resolve [ClassName::class, 'method'] into
@@ -115,9 +174,9 @@ final class Route
              */
             if (
                 $type instanceof \ReflectionNamedType &&
-                $type->getName() === \Base\Request::class
+                $type->getName() === Request::class
             ) {
-                $arguments[] = new \Base\Request();
+                $arguments[] = $request;
                 continue;
             }
 
@@ -136,5 +195,18 @@ final class Route
         }
 
         return $action(...$arguments);
+    }
+
+    private function resolveMiddlewares(): array
+    {
+        $definitions = require dirname(__DIR__) . '/configs/middleware.php';
+        return array_map(
+            function (string $middleware) use ($definitions) {
+                $class = $definitions[$middleware] ?? $middleware;
+
+                return new $class();
+            },
+            $this->middlewares
+        );
     }
 }

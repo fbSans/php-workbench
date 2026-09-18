@@ -21,4 +21,6 @@ if ($response === null) {
     exit;
 }
 
-echo $response;
+
+
+$response->send();
