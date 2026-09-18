@@ -2,6 +2,9 @@
 
 namespace Helpers;
 
+use Base\Response;
+use Base\View;
+
 /*
 |--------------------------------------------------------------------------
 | String helpers
@@ -205,6 +208,17 @@ function input(
         ?? $default;
 }
 
+/*
+|--------------------------------------------------------------------------
+| Response helpers
+|--------------------------------------------------------------------------
+*/
+function view(string $template, array $data = []): Response
+{
+    return new Response(
+        View::render($template, $data)
+    );
+}
 
 /*
 |--------------------------------------------------------------------------

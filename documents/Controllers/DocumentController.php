@@ -4,8 +4,10 @@ namespace Documents\Controllers;
 
 use Config\Config;
 use function Helpers\join_paths;
+use function Helpers\view;
 
 use Base\Request;
+use Base\Response;
 use Base\View;
 use Documents\Models\Document;
 
@@ -15,7 +17,7 @@ class DocumentController
         $page = $request->input('page', 1);
         $documents = Document::fetchPage($page, 20);
 
-        return View::render('documents/index.html.twig', compact('documents'));
+        return view('documents/index.html.twig', compact('documents'));
     }
 
     public function uploadFile(

@@ -10,11 +10,13 @@
             "Helpers\\": "helpers/",
             "Routes\\": "routes/",
             "Configs\\": "configs/",    
-            "Init\\":  "init/"    
+            "Init\\":  "init/",
+            "Middleware\\": "middlewares"    
         },
         "files": [
             "helpers/helpers.php",
             "configs/config.php",
+            "configs/middleware.php",
             "init/app.php"
         ]
     },
