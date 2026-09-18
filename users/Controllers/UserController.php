@@ -3,11 +3,14 @@ namespace Users\Controllers;
 
 use Base\View;
 use Base\Request;
+use Base\Response;
+use Routes\Route;
 use Users\Models\User;
 
 use function Helpers\clean_input;
 use function Helpers\escape_html;
 use function Helpers\valid_email;
+use function Helpers\view;
 
 class UserController {
     public function login_page()
@@ -17,10 +20,9 @@ class UserController {
             $context['errors'] = $_SESSION['errors'];
             unset($_SESSION['errors']);
         }
-        return View::render("authentication/login.html.twig", $context);
+        return view("authentication/login.html.twig", $context);
     }
 
-    //TODO: implement redirect
     public function login(Request $request){
         $context = [];
         $context['errors'] = [];
@@ -51,22 +53,17 @@ class UserController {
             assert(isset($user));
             $_SESSION['user_id'] = $user->id;
             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-            //TODO: redirect is the logic I want here.
-            header('Location: /');
-            exit();
+            return Response::redirect('/');
         } else {
             $_SESSION['errors'] = $context['errors'];
-            header('Location: /login');
-            exit();
+            return Response::redirect('/login');
         }
     }
 
     public function logout()
     {
-        var_dump($_SESSION);
         session_unset();
         session_abort();
-        header('Location: /login');
-        exit;
+        return Response::redirect('/login');
     }
 }

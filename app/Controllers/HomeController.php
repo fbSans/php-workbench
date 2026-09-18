@@ -2,13 +2,16 @@
 
 namespace App\Controllers;
 
+use Base\Response;
 use Base\View;
+
+use function Helpers\view;
 
 class HomeController
 {
-    public function index(): string
+    public function index(): Response
     {
-        return View::render('home.html.twig', [
+        return view('home.html.twig', [
             'title' => 'Document Management System',
             'message' => 'Welcome to the DMS',
         ]);

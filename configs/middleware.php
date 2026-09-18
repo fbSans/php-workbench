@@ -2,8 +2,8 @@
 
 namespace Config;
 
-use Middleware\TestMiddleware;
+use Middleware\AuthMiddleware;
 
 return [
-    'auth' => TestMiddleware::class,
+    'auth' => AuthMiddleware::class,
 ];
