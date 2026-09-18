@@ -62,8 +62,7 @@ class UserController {
 
     public function logout()
     {
-        session_unset();
-        session_abort();
+        session_destroy();
         return Response::redirect('/login');
     }
 }
