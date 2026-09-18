@@ -142,7 +142,7 @@ final class Route
         return '~^' . $pattern . '$~';
     }
 
-    private function invoke(mixed $action, array $params, Request $request): mixed
+    private function invoke(mixed $action, array $params, Request $request): Response
     {
         /*
          * Resolve [ClassName::class, 'method'] into
