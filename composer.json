@@ -5,8 +5,8 @@
         "psr-4": {
             "App\\": "app/",
             "Base\\": "bases/",    
-            "Documents\\": "documents/",
-            "Users\\": "users/",
+            "Documents\\": "modules/documents/",
+            "Users\\": "modules/users/",
             "Helpers\\": "helpers/",
             "Routes\\": "routes/",
             "Configs\\": "configs/",    
