@@ -2,22 +2,54 @@
 
 namespace Documents\Controllers;
 
+use Base\Controller;
 use Config\Config;
 use function Helpers\join_paths;
 use function Helpers\view;
 
 use Base\Request;
 use Base\Response;
-use Base\View;
 use Documents\Models\Document;
+use Documents\Models\File;
 
-class DocumentController
+class DocumentController extends Controller
 {
-    public function index(Request $request){
+    public function index(Request $request)
+    {
         $page = $request->input('page', 1);
         $documents = Document::fetchPage($page, 20);
 
         return view('documents/index.html.twig', compact('documents'));
+    }
+
+    public function save(Request $request)
+    {
+        $file_metadata = $this->uploadFile('/documents', 'file');
+
+        if(isset($file_metadata['errors'])) {
+            $_SESSION['errors'] = $file_metadata['errors'];
+            $_SESSION['parent_id'] = $request->input('parent_id', null);
+            return Response::redirect('/documents');
+        }
+
+        $unwind = function () use($file_metadata){
+            return $this->unlinkFile($file_metadata['dirname'], $file_metadata['filename']);
+        };
+
+        $make_submodel = function (File $file) use ($file_metadata) {
+            $document = new Document([
+                'id' => $file->id,
+                'mime_type' => $file_metadata['mime_type'],
+            ]);
+
+            return $document->create();
+        };
+    }
+
+
+    public function unlinkFile(string $dirname, string $filename){
+        $filepath = join_paths($dirname, $filename);
+        return unlink($filepath);
     }
 
     public function uploadFile(
