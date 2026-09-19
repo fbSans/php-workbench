@@ -104,7 +104,7 @@ CREATE TABLE group_user_shares (
     FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
 );
 
--- This can it up storage space real quick
+-- This can eat up storage space real quick
 -- I'm thinking it not including
 -- CREATE TABLE file_access_log(
 --     user_id INT UNSIGNED NOT NULL,
