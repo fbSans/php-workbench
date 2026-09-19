@@ -4,6 +4,7 @@ namespace Helpers;
 
 use Base\Response;
 use Base\View;
+use Users\Models\User;
 
 /*
 |--------------------------------------------------------------------------
@@ -219,6 +220,17 @@ function view(string $template, array $data = []): Response
         View::render($template, $data)
     );
 }
+
+/*
+|--------------------------------------------------------------------------
+| Auth helpers
+|--------------------------------------------------------------------------
+*/
+function auth_user(){
+    if(!$_SESSION || $_SESSION['user_id']) return null;
+    $user = User::find($_SESSION['user_id']);
+    return $user;
+} 
 
 /*
 |--------------------------------------------------------------------------

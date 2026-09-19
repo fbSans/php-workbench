@@ -6,6 +6,7 @@ CREATE DATABASE sgd_lean_db
 
 USE sgd_lean_db;
 
+
 CREATE TABLE users (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -16,7 +17,7 @@ CREATE TABLE users (
     deleted_at TIMESTAMP NULL
 );
 
-INSERT INTO users (name, email, password) VALUES ('system', 'system@sgd.local', '');
+
 
 CREATE TABLE groups (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -28,6 +29,27 @@ CREATE TABLE groups (
 
     FOREIGN KEY (created_by) REFERENCES users(id)
 );
+
+CREATE TABLE group_users (
+    group_id INT UNSIGNED NOT NULL,
+    user_id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (group_id, user_id),
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP NULL,
+
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE FUNCTION system_email() RETURNS TEXT DETERMINISTIC RETURN 'system@sgd.local'
+CREATE FUNCTION system_name() RETURNS TEXT DETERMINISTIC RETURN 'system'
+CREATE FUNCTION system_id() RETURNS INT UNSIGNED DETERMINISTIC RETURN (select id FROM users where email = system_email());
+CREATE FUNCTION system_group_id() RETURNS INT UNSIGNED DETERMINISTIC RETURN (select id FROM groups where name=system_name());
+
+INSERT INTO users (name, email, password) VALUES (system_name(), system_email(), '');
+INSERT INTO groups (name, created_by) values (system_name(), system_id());
+INSERT INTO group_users (group_id, user_id) values (system_group_id(), system_id());
 
 
 CREATE TABLE files (
@@ -71,18 +93,7 @@ CREATE TABLE documents (
 -- all                      0b111111 = 63
 
 -- By default will enable read
-
--- Relations below a quite similar
-CREATE TABLE file_user_shares (
-    user_id INT UNSIGNED NOT NULL,
-    file_id INT UNSIGNED NOT NULL,
-    permission INT DEFAULT 4, 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (user_id, file_id),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
-);
-
+-- Now shares are made only with groups. But every user has a dedicated group
 CREATE TABLE group_user_shares (
     group_id INT UNSIGNED NOT NULL,
     file_id INT UNSIGNED NOT NULL,
