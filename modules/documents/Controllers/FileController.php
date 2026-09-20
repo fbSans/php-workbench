@@ -13,7 +13,7 @@ use function Helpers\auth_user;
 
 class FileController
 {
-    public function save(Request $request, int $size, int $storage_name, callable $make_submodel, callable $unwind): Response
+    public function save(Request $request, array $metadata, callable $make_submodel, callable $unwind): Response
     {
         $parent_id = $request->input('parent_id', null);
         $parent_group_id = null;
@@ -41,13 +41,13 @@ class FileController
             Response::text('Not authorized', 400); //TODO: check the status for not authorized people.
         }
 
-        if (!$request->has('directory') && !$request->has('file')) {
-            Session::set('errors', [
-                'message' => 'Missing directory or document name',                
-            ]);
-            if($unwind) $unwind();
-            return Response::redirect('/documents');
-        }
+        // if (!$request->has('directory') && !$request->has('file')) {
+        //     Session::set('errors', [
+        //         'message' => 'Missing directory or document name',                
+        //     ]);
+        //     if($unwind) $unwind();
+        //     return Response::redirect('/documents');
+        // }
 
         if ($request->has('group_id') && $request->input('group_id') !== null) {
             $user_group = GroupUser::find(['user_id' => $user->id, 'group_id' => $request->input('group_id')]);
@@ -63,23 +63,23 @@ class FileController
             
             $group_id = $user_group->group_id;
         } else {
-            $group_id = $parent_group_id ?? $user->group()->group_id;
+            $group_id = $parent_group_id ?? $user->group()->id;
         }
 
 
-        $name = $request->input('directory') ?? $request->input('file');
+        // $name = $request->input('directory') ?? $request->input('file');
 
         $file = new File([
-            'name' => $name,
+            'name' => $metadata['name'],
             'parent_id' => $parent_id,
             'owner_id' => $user->id,
             'group_id' => $group_id,
-            'size' => $size,
-            'storage_name' => $storage_name,
+            'size' => $metadata['size'],
+            'storage_name' => $metadata['storage_name'],
         ]);
 
         if($file->create()) {
-            if($make_submodel && !$make_submodel()){
+            if($make_submodel && !$make_submodel($file)){
                 if($unwind) $unwind();
                 $file->delete();
 

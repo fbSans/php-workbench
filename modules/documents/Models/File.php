@@ -7,7 +7,7 @@ use Base\Model;
 class File extends Model{
     protected const table = "files";
 
-    protected $fillable = [
+    protected array $fillable = [
         "id",
         "name",
         "storage_name",

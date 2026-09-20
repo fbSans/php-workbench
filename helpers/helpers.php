@@ -3,6 +3,7 @@
 namespace Helpers;
 
 use Base\Response;
+use Base\Session;
 use Base\View;
 use Users\Models\User;
 
@@ -45,15 +46,19 @@ function str_not_empty(?string $value): bool
 
 function join_paths(string ...$parts): string
 {
+    $first = array_shift($parts);
+
+    $first = rtrim($first, '/\\');
+
     $parts = array_map(
-        fn (string $part) => trim($part, '/'),
+        fn (string $part) => trim($part, '/\\'),
         $parts
     );
 
-    return '/' . implode('/', array_filter(
-        $parts,
-        fn (string $part) => $part !== ''
-    ));
+    return $first . DIRECTORY_SEPARATOR . implode(
+        DIRECTORY_SEPARATOR,
+        array_filter($parts)
+    );
 }
 
 
@@ -227,7 +232,7 @@ function view(string $template, array $data = []): Response
 |--------------------------------------------------------------------------
 */
 function auth_user(){
-    if(!$_SESSION || $_SESSION['user_id']) return null;
+    if(!Session::has('user_id')) return null;
     $user = User::find($_SESSION['user_id']);
     return $user;
 } 

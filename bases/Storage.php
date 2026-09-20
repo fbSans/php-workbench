@@ -1,0 +1,226 @@
+<?php
+
+namespace Base;
+
+use Config\Config;
+use function Helpers\join_paths;
+
+class Storage
+{
+    public static function makedirIfNotExists(
+        string $dirname,
+        int $permissions = 0755
+    ): string {
+        $storage_dir = Config::get('STORAGE_DIR');
+
+        $dirname = str_replace('\\', '/', $dirname);
+
+        if (
+            $dirname === '' ||
+            str_starts_with($dirname, '/') ||
+            str_contains($dirname, "\0")
+        ) {
+            throw new \InvalidArgumentException('Invalid directory path.');
+        }
+
+        $parts = explode('/', $dirname);
+
+        foreach ($parts as $part) {
+            if ($part === '' || $part === '.') {
+                continue;
+            }
+
+            if ($part === '..') {
+                throw new \InvalidArgumentException(
+                    'Directory traversal is not allowed.'
+                );
+            }
+        }
+
+        /*
+         * Guarantee that the storage directory exists.
+         */
+        if (!is_dir($storage_dir)) {
+            if (file_exists($storage_dir)) {
+                throw new \RuntimeException(
+                    'Storage directory path exists but is not a directory.'
+                );
+            }
+
+            if (!mkdir(
+                $storage_dir,
+                Config::get('STORAGE_DIR_PERMISSIONS'),
+                true
+            )) {
+                throw new \RuntimeException(
+                    'Could not create storage directory.'
+                );
+            }
+        }
+
+        /*
+         * Resolve the storage directory to its canonical path.
+         */
+        $storage_dir = realpath($storage_dir);
+
+        if ($storage_dir === false) {
+            throw new \RuntimeException(
+                'Could not resolve storage directory.'
+            );
+        }
+
+        $path = join_paths($storage_dir, $dirname);
+
+        if (!is_dir($path) && !mkdir($path, $permissions, true)) {
+            throw new \RuntimeException('Could not create directory.');
+        }
+
+        $real_path = realpath($path);
+
+        if ($real_path === false) {
+            throw new \RuntimeException('Could not resolve directory path.');
+        }
+
+        /*
+         * Ensure the resolved path remains inside STORAGE_DIR.
+         */
+        $storage_prefix = rtrim($storage_dir, DIRECTORY_SEPARATOR)
+            . DIRECTORY_SEPARATOR;
+
+        if (
+            $real_path !== $storage_dir &&
+            !str_starts_with($real_path, $storage_prefix)
+        ) {
+            throw new \InvalidArgumentException(
+                'Directory is outside the storage directory.'
+            );
+        }
+
+        return $real_path;
+    }
+
+    public static function uploadFile(
+        string $storage_subfolder = 'tmp',
+        string $field = 'file',
+        ?int $max_size = null
+    ): array {
+        $max_size ??= Config::get('UPLOAD_MAX_SIZE');
+
+        if (!isset($_FILES[$field])) {
+            return [
+                'errors' => [
+                    $field => 'Not uploaded'
+                ]
+            ];
+        }
+
+        $file = $_FILES[$field];
+
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            return [
+                'errors' => [
+                    $field => 'File upload failed.'
+                ]
+            ];
+        }
+
+        if ($file['size'] > $max_size) {
+            return [
+                'errors' => [
+                    'message' => "Maximum file size exceeded. Maximum allowed size is $max_size bytes.",
+                    'size' => $file['size'],
+                    'max-size' => $max_size,
+                ]
+            ];
+        }
+
+        /*
+         * Prevent directory traversal through the uploaded filename.
+         */
+        $filename = basename($file['name']);
+
+        if (
+            $filename === '' ||
+            $filename === '.' ||
+            $filename === '..' ||
+            str_contains($filename, "\0")
+        ) {
+            return [
+                'errors' => [
+                    'message' => 'Invalid filename.'
+                ]
+            ];
+        }
+
+        /*
+         * Create/validate the storage directory.
+         */
+        try {
+            $upload_dir = self::makedirIfNotExists(
+                $storage_subfolder,
+                Config::get('STORAGE_DIR_PERMISSIONS')
+            );
+        } catch (\InvalidArgumentException $e) {
+            return [
+                'errors' => [
+                    'message' => $e->getMessage()
+                ]
+            ];
+        } catch (\RuntimeException $e) {
+            return [
+                'errors' => [
+                    'message' => $e->getMessage()
+                ]
+            ];
+        }
+
+        $trials = 5;
+        $target_file = '';
+        $storage_name = '';
+
+        assert($trials > 0);
+
+        while ($trials-- > 0) {
+            $storage_name = bin2hex(random_bytes(32));
+
+            $target_file = join_paths(
+                $upload_dir,
+                $storage_name
+            );
+
+            if (!file_exists($target_file)) {
+                break;
+            }
+        }
+
+        if (file_exists($target_file)) {
+            return [
+                'errors' => [
+                    'message' => 'Could not generate unique name for the file in the filesystem.'
+                ]
+            ];
+        }
+
+        if (!move_uploaded_file($file['tmp_name'], $target_file)) {
+            return [
+                'errors' => [
+                    'message' => 'Failed to save uploaded file.'
+                ]
+            ];
+        }
+
+        return [
+            'ok' => 'File saved.',
+            'name' => $filename,
+            'storage_name' => $storage_name,
+            'mime_type' => $file['type'],
+            'dirname' => $upload_dir,
+            'size' => $file['size'],
+        ];
+    }
+
+    public static function unlinkFile(string $filepath): bool
+    {
+        return unlink($filepath);
+    }
+}

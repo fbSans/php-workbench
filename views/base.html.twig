@@ -43,6 +43,77 @@
 </main>
 
 <script src="/assets/bootstrap/js/bootstrap.bundle.min.js"></script>
+
+{% if error_message is defined and error_message %}
+    <div class="toast-container position-fixed top-0 end-0 p-3">
+        <div
+            id="errorToast"
+            class="toast text-bg-danger"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+        >
+            <div class="toast-header">
+                <strong class="me-auto">Error</strong>
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="toast"
+                    aria-label="Close"
+                ></button>
+            </div>
+
+            <div class="toast-body">
+                {{ error_message }}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const toastEl = document.getElementById('errorToast');
+        const toast = new bootstrap.Toast(toastEl, {
+            delay: 3000
+        });
+
+        toast.show();
+    </script>
+{% endif %}
+
+{% if success_message is defined and success_message %}
+    <div class="toast-container position-fixed top-0 end-0 p-3">
+        <div
+            id="successToast"
+            class="toast text-bg-success"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+        >
+            <div class="toast-header">
+                <strong class="me-auto">Message</strong>
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="toast"
+                    aria-label="Close"
+                ></button>
+            </div>
+
+            <div class="toast-body">
+                {{ success_message }}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const toastEl2 = document.getElementById('successToast');
+        const toast2 = new bootstrap.Toast(toastEl2, {
+            delay: 3000
+        });
+
+        toast2.show();
+    </script>
+{% endif %}
+
 {# <script src="/assets/bootstrap/js/app.js"></script> #}
 
 </body>
