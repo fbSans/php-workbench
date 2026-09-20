@@ -22,14 +22,20 @@ class File extends Model{
         "deleted_at",
     ];
 
-    // protected array $relationships = [
-    //     'owner' => [
-    //         'model' => User::class,
-    //         'type' => 'belongsTo',
-    //         'local' => 'id',
-    //         'foreign' => 'owner_id',
-    //     ],
-    // ];
+    protected array $relationships = [
+        'owner' => [
+            'model' => User::class,
+            'type' => 'belongsTo',
+            'local' => 'id',
+            'foreign' => 'owner_id',
+        ],
+        'document' => [
+            'type' => 'hasOne',
+            'model' => Document::class,
+            'local' => 'id',
+            'foreign' => 'id',
+        ],
+    ];
 }
 
 // // Normal lookup.

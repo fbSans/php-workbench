@@ -3,6 +3,8 @@
 use Routes\Route;
 use App\Controllers\HomeController;
 use Documents\Controllers\DocumentController;
+use Documents\Models\Document;
+use Documents\Models\File;
 use Users\Controllers\UserController;
 use Users\Models\User;
 
@@ -14,7 +16,7 @@ Route::post('/login', [UserController::class, 'login']);
 Route::post('/logout', [UserController::class, 'logout'])->middleware('auth');
 Route::post('/document/save', [DocumentController::class, 'save'])->middleware('auth');
 Route::get('/debug', function (){
-    $user = User::find(1);
-    var_dump($user->group());
+    $document = Document::first();
+    var_dump($document->file);
     exit;
 });

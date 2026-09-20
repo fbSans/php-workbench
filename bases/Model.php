@@ -201,8 +201,8 @@ abstract class Model
 
         throw new \BadMethodCallException(
             'Call to undefined method '
-            . static::class
-            . "::{$name}()"
+                . static::class
+                . "::{$name}()"
         );
     }
 
@@ -234,7 +234,7 @@ abstract class Model
         if (!is_string($table) || $table === '') {
             throw new \LogicException(
                 static::class
-                . ' must define a non-empty string table.'
+                    . ' must define a non-empty string table.'
             );
         }
 
@@ -343,6 +343,18 @@ abstract class Model
             return;
         }
 
+        if ($type === 'hasOne') {
+            static::eagerLoadHasOne(
+                $models,
+                $name,
+                $related,
+                $local,
+                $foreign
+            );
+
+            return;
+        }
+
         static::eagerLoadBelongsTo(
             $models,
             $name,
@@ -408,6 +420,65 @@ abstract class Model
 
             $model->loadedRelationships[$name] =
                 $grouped[(string) $value] ?? [];
+        }
+    }
+
+    protected static function eagerLoadHasOne(
+        array $models,
+        string $name,
+        string $related,
+        string $local,
+        string $foreign
+    ): void {
+        $values = [];
+
+        foreach ($models as $model) {
+            if (!$model instanceof static) {
+                throw new \InvalidArgumentException(
+                    'Eager-loaded collection contains an invalid model.'
+                );
+            }
+
+            $value = $model->{$local};
+
+            if ($value !== null) {
+                $values[(string) $value] = $value;
+            }
+        }
+
+        if ($values === []) {
+            foreach ($models as $model) {
+                $model->loadedRelationships[$name] = null;
+            }
+
+            return;
+        }
+
+        $relatedModels = $related::getWhereIn(
+            $foreign,
+            array_values($values)
+        );
+
+        $indexed = [];
+
+        foreach ($relatedModels as $relatedModel) {
+            $value = $relatedModel->{$foreign};
+
+            if ($value !== null) {
+                $indexed[(string) $value] = $relatedModel;
+            }
+        }
+
+        foreach ($models as $model) {
+            $value = $model->{$local};
+
+            if ($value === null) {
+                $model->loadedRelationships[$name] = null;
+                continue;
+            }
+
+            $model->loadedRelationships[$name] =
+                $indexed[(string) $value] ?? null;
         }
     }
 
@@ -500,7 +571,7 @@ abstract class Model
         if (!is_a($model, self::class, true)) {
             throw new \InvalidArgumentException(
                 "Relationship '{$name}' model must extend "
-                . self::class . '.'
+                    . self::class . '.'
             );
         }
 
@@ -516,7 +587,7 @@ abstract class Model
             !is_string($type) ||
             !in_array(
                 $type,
-                ['hasMany', 'belongsTo'],
+                ['hasMany', 'hasOne', 'belongsTo'],
                 true
             )
         ) {
@@ -596,6 +667,23 @@ abstract class Model
                     $foreign => $value,
                 ]);
         }
+
+        if ($type === 'hasOne') {
+            $value = $this->{$local};
+
+            if ($value === null) {
+                return $this->loadedRelationships[$name] = null;
+            }
+
+            $models = $related::get([
+                $foreign => $value,
+            ]);
+
+            return $this->loadedRelationships[$name] =
+                $models[0] ?? null;
+        }
+
+        // belongsTo
 
         $value = $this->{$foreign};
 
@@ -843,6 +931,17 @@ abstract class Model
         }
 
         return $models;
+    }
+
+    public static function first()
+    {
+        $sql = "SELECT * FROM " . static::table() . " LIMIT 1";
+        $stmt = static::connection()->prepare($sql);
+        $stmt->execute();
+        $rows = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$rows) return null;
+        return static::hydrate($rows);
     }
 
     public static function getWhereIn(
@@ -1179,12 +1278,12 @@ abstract class Model
                 $operator = match ($operator) {
                     '=', '==', '!=', '<>', '<',
                     '<=', '>', '>='
-                        => $operator,
+                    => $operator,
 
                     'LIKE', 'NOT LIKE',
                     'IN', 'NOT IN',
                     'IS', 'IS NOT'
-                        => $operator,
+                    => $operator,
 
                     default => throw new \InvalidArgumentException(
                         "Invalid WHERE operator '{$operator}'."
@@ -1228,8 +1327,8 @@ abstract class Model
                     if ($operand === []) {
                         $conditions[] =
                             $operator === 'IN'
-                                ? '0'
-                                : '1';
+                            ? '0'
+                            : '1';
 
                         continue;
                     }
@@ -1257,8 +1356,8 @@ abstract class Model
                     $conditions[] =
                         $operator === '!=' ||
                         $operator === '<>'
-                            ? "{$column} IS NOT NULL"
-                            : "{$column} IS NULL";
+                        ? "{$column} IS NOT NULL"
+                        : "{$column} IS NULL";
 
                     continue;
                 }
@@ -1551,9 +1650,15 @@ abstract class Model
                 );
 
                 $allowed = [
-                    '=', '!=', '<>', '<',
-                    '<=', '>', '>=',
-                    'LIKE', 'NOT LIKE',
+                    '=',
+                    '!=',
+                    '<>',
+                    '<',
+                    '<=',
+                    '>',
+                    '>=',
+                    'LIKE',
+                    'NOT LIKE',
                 ];
 
                 if (!in_array(
@@ -1780,7 +1885,7 @@ abstract class Model
             ) {
                 throw new \InvalidArgumentException(
                     'JOIN local and foreign keys must both be arrays '
-                    . 'or both be scalar values.'
+                        . 'or both be scalar values.'
                 );
             }
 
@@ -1807,7 +1912,7 @@ abstract class Model
             ) {
                 throw new \InvalidArgumentException(
                     'JOIN local and foreign keys must contain '
-                    . 'the same number of columns.'
+                        . 'the same number of columns.'
                 );
             }
 
@@ -1880,7 +1985,7 @@ abstract class Model
             if ($primaryKey === '') {
                 throw new \LogicException(
                     static::class
-                    . ' has an empty primary key.'
+                        . ' has an empty primary key.'
                 );
             }
 
@@ -1897,8 +2002,8 @@ abstract class Model
         ) {
             throw new \LogicException(
                 static::class
-                . ' must define primary_key as a string '
-                . 'or non-empty array.'
+                    . ' must define primary_key as a string '
+                    . 'or non-empty array.'
             );
         }
 
@@ -1906,8 +2011,8 @@ abstract class Model
             if (!is_string($column)) {
                 throw new \LogicException(
                     static::class
-                    . ' primary_key array must contain '
-                    . 'only strings.'
+                        . ' primary_key array must contain '
+                        . 'only strings.'
                 );
             }
 

@@ -24,13 +24,13 @@ class User extends Model{
         );
     }
 
-    // protected array $relationships = [
-    //     'files' => [
-    //         'model' => File::class,
-    //         'type' => 'hasMany',
-    //         'local' => 'id',
-    //         'foreign' => 'owner_id',
-    //     ],
-    // ];
+    protected array $relationships = [
+        'files' => [
+            'model' => File::class,
+            'type' => 'hasMany',
+            'local' => 'id',
+            'foreign' => 'owner_id',
+        ],
+    ];
 }
 

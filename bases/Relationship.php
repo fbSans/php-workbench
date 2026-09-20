@@ -1,24 +1,9 @@
 <?php
 
-// declare(strict_types=1);
+declare(strict_types=1);
 
 namespace Base;
 
-/**
- * Represents a relationship belonging to a model.
- *
- * Examples:
- *
- *     $user->files()->get();
- *
- *     $page = 1;
- *     $user->files()->fetchPage($page, 20);
- *
- * Supported relationships:
- *
- * - hasMany
- * - belongsTo
- */
 class Relationship
 {
     protected Model $parent;
@@ -37,15 +22,6 @@ class Relationship
         $this->definition = $definition;
     }
 
-    /**
-     * Retrieve all related models.
-     *
-     * This preserves the relationship API:
-     *
-     *     $user->files()->get();
-     *
-     * The relationship is cached by loadRelationship().
-     */
     public function get(): array|Model|null
     {
         return $this->parent->loadRelationship(
@@ -54,11 +30,6 @@ class Relationship
         );
     }
 
-    /**
-     * Retrieve a page of related models.
-     *
-     * The result has the same structure as Model::fetchPage().
-     */
     public function fetchPage(
         int &$page,
         int $pageSize
@@ -73,80 +44,29 @@ class Relationship
             );
         }
 
-        /*
-         * Validate the definition before accessing offsets.
-         *
-         * This is important because array offset access on an
-         * unexpected value is what was causing the fatal error.
-         */
-        if (!isset($this->definition['model'])) {
-            throw new \InvalidArgumentException(
-                "Relationship '{$this->name}' must define a model."
-            );
-        }
-
-        if (!is_string($this->definition['model'])) {
-            throw new \InvalidArgumentException(
-                'Relationship model must be a class name.'
-            );
-        }
-
-        if (!isset($this->definition['type'])) {
-            throw new \InvalidArgumentException(
-                "Relationship '{$this->name}' must define a type."
-            );
-        }
-
-        if (!is_string($this->definition['type'])) {
-            throw new \InvalidArgumentException(
-                'Relationship type must be a string.'
-            );
-        }
-
-        if (!isset($this->definition['local'])) {
-            throw new \InvalidArgumentException(
-                "Relationship '{$this->name}' must define a local key."
-            );
-        }
-
-        if (!isset($this->definition['foreign'])) {
-            throw new \InvalidArgumentException(
-                "Relationship '{$this->name}' must define a foreign key."
-            );
-        }
-
-        if (
-            !is_string($this->definition['local']) ||
-            !is_string($this->definition['foreign'])
-        ) {
-            throw new \InvalidArgumentException(
-                'Relationship keys must be strings.'
-            );
-        }
-
         $related = $this->definition['model'];
         $type = $this->definition['type'];
         $local = $this->definition['local'];
         $foreign = $this->definition['foreign'];
 
-        if (!class_exists($related)) {
+        if (!is_string($related)) {
             throw new \InvalidArgumentException(
-                "Relationship '{$this->name}' references "
-                . "an invalid model."
+                'Relationship model must be a class name.'
             );
         }
 
-        if (!is_a($related, Model::class, true)) {
+        if (!is_string($type)) {
             throw new \InvalidArgumentException(
-                'Relationship model must extend ' . Model::class . '.'
+                'Relationship type must be a string.'
             );
         }
 
-        /*
-         * hasMany:
-         *
-         * parent.local = related.foreign
-         */
+        if (!is_string($local) || !is_string($foreign)) {
+            throw new \InvalidArgumentException(
+                'Relationship keys must be strings.'
+            );
+        }
+
         if ($type === 'hasMany') {
             $value = $this->parent->{$local};
 
@@ -169,11 +89,50 @@ class Relationship
             );
         }
 
-        /*
-         * belongsTo:
-         *
-         * parent.foreign = related.local
-         */
+        if ($type === 'hasOne') {
+            $value = $this->parent->{$local};
+
+            if ($value === null) {
+                return [
+                    'items' => [],
+                    'page' => $page,
+                    'page_size' => $pageSize,
+                    'total' => 0,
+                    'pages' => 0,
+                ];
+            }
+
+            $models = $related::get(
+                [
+                    $foreign => $value,
+                ],
+                null,
+                null,
+                [],
+                null
+            );
+
+            if ($models === []) {
+                return [
+                    'items' => [],
+                    'page' => $page,
+                    'page_size' => $pageSize,
+                    'total' => 0,
+                    'pages' => 0,
+                ];
+            }
+
+            return [
+                'items' => [
+                    $models[0],
+                ],
+                'page' => 1,
+                'page_size' => $pageSize,
+                'total' => 1,
+                'pages' => 1,
+            ];
+        }
+
         if ($type === 'belongsTo') {
             $value = $this->parent->{$foreign};
 
