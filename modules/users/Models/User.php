@@ -2,7 +2,7 @@
 namespace Users\Models;
 
 use Base\Model;
-
+use Documents\Models\File;
 
 class User extends Model{
     protected const table = 'users';
@@ -23,5 +23,14 @@ class User extends Model{
             GroupUser::get(['user_id' => $this->id])
         );
     }
+
+    // protected array $relationships = [
+    //     'files' => [
+    //         'model' => File::class,
+    //         'type' => 'hasMany',
+    //         'local' => 'id',
+    //         'foreign' => 'owner_id',
+    //     ],
+    // ];
 }
 

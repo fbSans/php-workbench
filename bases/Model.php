@@ -4,657 +4,617 @@ declare(strict_types=1);
 
 namespace Base;
 
+use PDO;
+
+/**
+ * Base model for database-backed entities.
+ *
+ * Provides:
+ *
+ * - Attribute access and hydration.
+ * - Basic CRUD operations.
+ * - SELECT helpers.
+ * - Pagination.
+ * - WHERE, GROUP BY, HAVING and ORDER BY support.
+ * - Explicit JOIN support.
+ * - hasMany and belongsTo relationships.
+ * - Lazy relationship loading.
+ * - Eager relationship loading.
+ */
 abstract class Model
 {
+    /**
+     * Database table associated with the model.
+     *
+     * Child models should override this constant:
+     *
+     * protected const table = 'users';
+     */
     protected const table = null;
+
+    /**
+     * Primary key.
+     *
+     * Simple key:
+     *
+     * protected const primary_key = 'id';
+     *
+     * Compound key:
+     *
+     * protected const primary_key = [
+     *     'company_id',
+     *     'employee_id',
+     * ];
+     */
     protected const primary_key = 'id';
 
+    /**
+     * Attributes allowed during persistence.
+     */
     protected array $fillable = [];
+
+    /**
+     * Attributes excluded by toArray().
+     */
     protected array $hidden = [];
+
+    /**
+     * Model attributes.
+     */
     protected array $attributes = [];
+
+    /**
+     * Primary key values currently belonging to this model.
+     */
     protected array $primaryKeyValues = [];
 
-    protected static ?\PDO $db = null;
+    /**
+     * Relationship definitions.
+     */
+    protected array $relationships = [];
+
+    /**
+     * Already-loaded relationships.
+     */
+    protected array $loadedRelationships = [];
+
+    /**
+     * Shared database connection.
+     */
+    protected static ?PDO $pdo = null;
 
     /*
-     * ---------------------------------------------------------
-     * Connection
-     * ---------------------------------------------------------
+     * =========================================================================
+     * CONNECTION
+     * =========================================================================
      */
 
-    public static function setConnection(\PDO $pdo): void
+    public static function setConnection(PDO $pdo): void
     {
-        static::$db = $pdo;
+        static::$pdo = $pdo;
     }
 
     public static function closeConnection(): void
     {
-        static::$db = null;
+        static::$pdo = null;
     }
 
-    protected static function connection(): \PDO
+    protected static function connection(): PDO
     {
-        if (static::$db === null) {
+        if (static::$pdo === null) {
             throw new \RuntimeException(
                 'Database connection has not been initialized.'
             );
         }
 
-        return static::$db;
+        return static::$pdo;
     }
 
     /*
-     * ---------------------------------------------------------
-     * Construction / attributes
-     * ---------------------------------------------------------
+     * =========================================================================
+     * MODEL / ATTRIBUTES
+     * =========================================================================
      */
 
-    public function __construct(array $data = [])
+    public function __construct(array $attributes = [])
     {
-        foreach ($data as $key => $value) {
-            if (in_array($key, $this->fillable, true)) {
-                $this->__set($key, $value);
-            }
+        foreach ($attributes as $key => $value) {
+            $this->attributes[$key] = $value;
         }
 
-        $pk = static::primary_key;
-
-        if (is_array($pk)) {
-            foreach ($pk as $column) {
-                $value = $data[$column] ?? null;
-
-                $this->primaryKeyValues[$column] = $value;
-
-                if (array_key_exists($column, $data)) {
-                    $this->attributes[$column] = $value;
-                }
-            }
-        } else {
-            $value = $data[$pk] ?? null;
-
-            $this->primaryKeyValues[$pk] = $value;
-
-            if (array_key_exists($pk, $data)) {
-                $this->attributes[$pk] = $value;
-            }
-        }
+        $this->refreshPrimaryKeyValues();
     }
 
-    public function __set(string $name, mixed $value): void
-    {
-        if (!in_array($name, $this->fillable, true)) {
-            throw new \Exception(
-                "Cannot set non-fillable attribute '$name'."
+    public function __set(
+        string $name,
+        mixed $value
+    ): void {
+        if (
+            $this->fillable !== [] &&
+            !in_array($name, $this->fillable, true)
+        ) {
+            throw new \InvalidArgumentException(
+                "Attribute '{$name}' is not fillable."
             );
         }
 
         $this->attributes[$name] = $value;
+
+        $this->refreshPrimaryKeyValues();
     }
 
     public function __get(string $name): mixed
     {
-        if (in_array($name, $this->hidden, true)) {
-            throw new \Exception(
-                "Attribute '$name' is hidden."
+        if (array_key_exists($name, $this->attributes)) {
+            return $this->attributes[$name];
+        }
+
+        if (array_key_exists($name, $this->loadedRelationships)) {
+            return $this->loadedRelationships[$name];
+        }
+
+        if (array_key_exists($name, $this->relationships)) {
+            return $this->loadRelationship($name);
+        }
+
+        return null;
+    }
+
+    public function __isset(string $name): bool
+    {
+        if (array_key_exists($name, $this->attributes)) {
+            return true;
+        }
+
+        if (array_key_exists($name, $this->loadedRelationships)) {
+            return true;
+        }
+
+        return array_key_exists($name, $this->relationships);
+    }
+
+    /**
+     * Resolve a relationship as a Relationship object.
+     *
+     * Example:
+     *
+     * $user->files()->get();
+     * $user->files()->fetchPage($page, 20);
+     */
+    public function __call(
+        string $name,
+        array $arguments
+    ): mixed {
+        if (array_key_exists($name, $this->relationships)) {
+            if ($arguments !== []) {
+                throw new \ArgumentCountError(
+                    "Relationship '{$name}' does not accept arguments."
+                );
+            }
+
+            return new Relationship(
+                $this,
+                $name,
+                $this->relationships[$name]
             );
         }
 
-        return $this->attributes[$name] ?? null;
-    }
-
-    protected function getRaw(string $name): mixed
-    {
-        return $this->attributes[$name] ?? null;
+        throw new \BadMethodCallException(
+            'Call to undefined method '
+            . static::class
+            . "::{$name}()"
+        );
     }
 
     public function toArray(): array
     {
-        return array_diff_key(
-            $this->attributes,
-            array_flip($this->hidden)
-        );
+        $result = [];
+
+        foreach ($this->attributes as $key => $value) {
+            if (in_array($key, $this->hidden, true)) {
+                continue;
+            }
+
+            $result[$key] = $value;
+        }
+
+        return $result;
     }
 
-    /*
-     * ---------------------------------------------------------
-     * Table / columns
-     * ---------------------------------------------------------
+    /**
+     * Get the model table.
+     *
+     * static::table uses late static binding, therefore a child
+     * model's table constant is resolved here.
      */
-
     public static function table(): string
     {
         $table = static::table;
 
-        if (!is_string($table)) {
-            throw new \Exception(
-                static::class . ' must define table constant.'
+        if (!is_string($table) || $table === '') {
+            throw new \LogicException(
+                static::class
+                . ' must define a non-empty string table.'
             );
         }
+
+        static::validateIdentifier($table);
 
         return $table;
     }
 
-    protected static function validateColumn(string $column): string
-    {
-        if (!preg_match(
-            '/^[a-zA-Z_][a-zA-Z0-9_]*$/',
-            $column
-        )) {
-            throw new \InvalidArgumentException(
-                "Invalid column name: {$column}"
+    /*
+     * =========================================================================
+     * RELATIONSHIPS
+     * =========================================================================
+     */
+
+    public static function with(
+        array|string $relationships
+    ): ModelQuery {
+        $relationships = is_array($relationships)
+            ? $relationships
+            : [$relationships];
+
+        foreach ($relationships as $name) {
+            if (!is_string($name)) {
+                throw new \InvalidArgumentException(
+                    'Relationship names must be strings.'
+                );
+            }
+        }
+
+        return new ModelQuery(
+            static::class,
+            $relationships
+        );
+    }
+
+    /**
+     * Eager-load relationships on an existing collection.
+     */
+    public static function load(
+        array $models,
+        array|string $relationships
+    ): array {
+        if ($models === []) {
+            return $models;
+        }
+
+        $relationships = is_array($relationships)
+            ? $relationships
+            : [$relationships];
+
+        foreach ($relationships as $name) {
+            if (!is_string($name)) {
+                throw new \InvalidArgumentException(
+                    'Relationship names must be strings.'
+                );
+            }
+
+            static::eagerLoadRelationship(
+                $models,
+                $name
             );
         }
 
-        return $column;
+        return $models;
     }
 
-    /*
-     * ---------------------------------------------------------
-     * Hydration
-     * ---------------------------------------------------------
-     */
+    protected static function eagerLoadRelationship(
+        array $models,
+        string $name
+    ): void {
+        $instance = new static();
 
-    protected static function hydrate(array $row): static
-    {
-        $model = new static();
-
-        $model->attributes = $row;
-
-        $pk = static::primary_key;
-
-        if (is_array($pk)) {
-            foreach ($pk as $column) {
-                $model->primaryKeyValues[$column] =
-                    $row[$column] ?? null;
-            }
-        } else {
-            $model->primaryKeyValues[$pk] =
-                $row[$pk] ?? null;
+        if (!array_key_exists($name, $instance->relationships)) {
+            throw new \InvalidArgumentException(
+                "Relationship '{$name}' does not exist."
+            );
         }
 
-        return $model;
-    }
+        $definition = $instance->relationships[$name];
 
-    /*
-     * ---------------------------------------------------------
-     * WHERE
-     * ---------------------------------------------------------
-     *
-     * Supported forms:
-     *
-     *     'name' => 'John'
-     *
-     *     'age' => ['>', 18]
-     *
-     *     'name' => ['LIKE', 'John%']
-     *
-     *     'id' => ['IN', [1, 2, 3]]
-     *
-     *     'id' => ['NOT IN', [1, 2, 3]]
-     *
-     *     'deleted_at' => null
-     *
-     *     'deleted_at' => ['IS NULL', null]
-     *
-     *     'deleted_at' => ['IS NOT NULL', null]
-     *
-     * All values are parameterized.
-     */
-
-    protected static function buildWhere(array $conditions): array
-    {
-        if ($conditions === []) {
-            return [
-                'sql' => '1',
-                'params' => [],
-            ];
+        if (!is_array($definition)) {
+            throw new \InvalidArgumentException(
+                "Relationship '{$name}' does not have a valid definition."
+            );
         }
 
-        $parts = [];
-        $params = [];
-
-        $allowedOperators = [
-            '=',
-            '!=',
-            '<>',
-            '<',
-            '<=',
-            '>',
-            '>=',
-            'LIKE',
-            'NOT LIKE',
-            'IN',
-            'NOT IN',
-            'IS NULL',
-            'IS NOT NULL',
-        ];
-
-        foreach ($conditions as $column => $condition) {
-            $column = static::validateColumn($column);
-
-            /*
-             * -------------------------------------------------
-             * Simple equality
-             *
-             *     'owner_id' => 10
-             *
-             * becomes:
-             *
-             *     owner_id = :where_0
-             * -------------------------------------------------
-             */
-
-            if (!is_array($condition)) {
-                if ($condition === null) {
-                    $parts[] = "$column IS NULL";
-                    continue;
-                }
-
-                $placeholder = 'where_' . count($params);
-
-                $parts[] =
-                    "$column = :$placeholder";
-
-                $params[$placeholder] = $condition;
-
-                continue;
-            }
-
-            /*
-             * -------------------------------------------------
-             * Operator form
-             *
-             *     'size' => ['>', 1000]
-             * -------------------------------------------------
-             */
-
-            if (count($condition) !== 2) {
-                throw new \InvalidArgumentException(
-                    "WHERE condition for '$column' " .
-                        "must contain operator and value."
-                );
-            }
-
-            [$operator, $value] = $condition;
-
-            if (!is_string($operator)) {
-                throw new \InvalidArgumentException(
-                    "WHERE operator for '$column' must be a string."
-                );
-            }
-
-            $operator = strtoupper(trim($operator));
-
-            if (!in_array($operator, $allowedOperators, true)) {
-                throw new \InvalidArgumentException(
-                    "Invalid WHERE operator: {$operator}"
-                );
-            }
-
-            /*
-             * -------------------------------------------------
-             * IS NULL / IS NOT NULL
-             *
-             * No parameter is required.
-             * -------------------------------------------------
-             */
-
-            if (
-                $operator === 'IS NULL' ||
-                $operator === 'IS NOT NULL'
-            ) {
-                $parts[] = "$column $operator";
-
-                continue;
-            }
-
-            /*
-             * -------------------------------------------------
-             * IN / NOT IN
-             *
-             * Each value receives its own placeholder.
-             * -------------------------------------------------
-             */
-
-            if (
-                $operator === 'IN' ||
-                $operator === 'NOT IN'
-            ) {
-                if (!is_array($value)) {
-                    throw new \InvalidArgumentException(
-                        "$operator requires an array of values."
-                    );
-                }
-
-                /*
-                 * Empty IN lists cannot be represented as:
-                 *
-                 *     IN ()
-                 *
-                 * Instead:
-                 *
-                 *     x IN []      -> false
-                 *     x NOT IN []  -> true
-                 */
-
-                if ($value === []) {
-                    $parts[] =
-                        $operator === 'IN'
-                        ? '0'
-                        : '1';
-
-                    continue;
-                }
-
-                $placeholders = [];
-
-                foreach ($value as $item) {
-                    if ($item === null) {
-                        throw new \InvalidArgumentException(
-                            "$operator cannot contain NULL. " .
-                                "Use IS NULL separately."
-                        );
-                    }
-
-                    $placeholder =
-                        'where_' . count($params);
-
-                    $placeholders[] =
-                        ':' . $placeholder;
-
-                    $params[$placeholder] = $item;
-                }
-
-                $parts[] =
-                    "$column $operator (" .
-                    implode(', ', $placeholders) .
-                    ')';
-
-                continue;
-            }
-
-            /*
-             * -------------------------------------------------
-             * NULL with normal operators
-             * -------------------------------------------------
-             *
-             *     ['=', null]
-             *         -> IS NULL
-             *
-             *     ['!=', null]
-             *         -> IS NOT NULL
-             */
-
-            if ($value === null) {
-                if ($operator === '=') {
-                    $parts[] = "$column IS NULL";
-
-                    continue;
-                }
-
-                if (
-                    $operator === '!=' ||
-                    $operator === '<>'
-                ) {
-                    $parts[] = "$column IS NOT NULL";
-
-                    continue;
-                }
-
-                throw new \InvalidArgumentException(
-                    "NULL cannot be used with " .
-                        "WHERE operator {$operator}."
-                );
-            }
-
-            /*
-             * -------------------------------------------------
-             * Normal operator
-             *
-             *     ['>', 100]
-             *     ['LIKE', 'John%']
-             * -------------------------------------------------
-             */
-
-            $placeholder =
-                'where_' . count($params);
-
-            $parts[] =
-                "$column $operator :$placeholder";
-
-            $params[$placeholder] = $value;
-        }
-
-        return [
-            'sql' => implode(' AND ', $parts),
-            'params' => $params,
-        ];
-    }
-
-    /*
-     * ---------------------------------------------------------
-     * SELECT
-     * ---------------------------------------------------------
-     */
-
-    protected static function buildSelect(
-        array|string|null $select
-    ): string {
-        if ($select === null) {
-            return '*';
-        }
-
-        if (is_string($select)) {
-            return $select;
-        }
-
-        if ($select === []) {
-            return '*';
-        }
-
-        return implode(', ', $select);
-    }
-
-    /*
-     * ---------------------------------------------------------
-     * AGGREGATE DETECTION
-     * ---------------------------------------------------------
-     */
-
-    protected static function isAggregateSelect(
-        array|string|null $select
-    ): bool {
-        if ($select === null) {
-            return false;
-        }
-
-        $expressions = is_array($select)
-            ? $select
-            : [$select];
-
-        foreach ($expressions as $expression) {
-            if (preg_match(
-                '/\b(COUNT|SUM|AVG|MIN|MAX)\s*\(/i',
-                $expression
-            )) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /*
-     * ---------------------------------------------------------
-     * GROUP BY
-     * ---------------------------------------------------------
-     */
-
-    protected static function buildGroupBy(
-        array|string|null $groupBy
-    ): string {
-        if ($groupBy === null) {
-            return '';
-        }
-
-        if (is_string($groupBy)) {
-            $groupBy = [$groupBy];
-        }
-
-        if ($groupBy === []) {
-            return '';
-        }
-
-        $columns = array_map(
-            fn(string $column): string =>
-            static::validateColumn($column),
-            $groupBy
+        static::validateRelationship(
+            $name,
+            $definition
         );
 
-        return ' GROUP BY ' . implode(', ', $columns);
+        $related = $definition['model'];
+        $type = $definition['type'];
+        $local = $definition['local'];
+        $foreign = $definition['foreign'];
+
+        if ($type === 'hasMany') {
+            static::eagerLoadHasMany(
+                $models,
+                $name,
+                $related,
+                $local,
+                $foreign
+            );
+
+            return;
+        }
+
+        static::eagerLoadBelongsTo(
+            $models,
+            $name,
+            $related,
+            $local,
+            $foreign
+        );
     }
 
-    /*
-     * ---------------------------------------------------------
-     * HAVING
-     * ---------------------------------------------------------
-     */
+    protected static function eagerLoadHasMany(
+        array $models,
+        string $name,
+        string $related,
+        string $local,
+        string $foreign
+    ): void {
+        $values = [];
 
-    protected static function buildHaving(array $conditions): array
-    {
-        if ($conditions === []) {
-            return [
-                'sql' => '',
-                'params' => [],
-            ];
+        foreach ($models as $model) {
+            if (!$model instanceof static) {
+                throw new \InvalidArgumentException(
+                    'Eager-loaded collection contains an invalid model.'
+                );
+            }
+
+            $value = $model->{$local};
+
+            if ($value !== null) {
+                $values[(string) $value] = $value;
+            }
         }
 
-        $parts = [];
-        $params = [];
-
-        foreach ($conditions as $condition) {
-            if (!is_array($condition) || count($condition) !== 3) {
-                throw new \InvalidArgumentException(
-                    'HAVING conditions must contain expression, operator and value.'
-                );
+        if ($values === []) {
+            foreach ($models as $model) {
+                $model->loadedRelationships[$name] = [];
             }
 
-            [$expression, $operator, $value] = $condition;
-
-            if (!is_string($expression)) {
-                throw new \InvalidArgumentException(
-                    'HAVING expression must be a string.'
-                );
-            }
-
-            $operator = strtoupper((string) $operator);
-
-            $allowedOperators = [
-                '=',
-                '!=',
-                '<>',
-                '<',
-                '<=',
-                '>',
-                '>=',
-                'LIKE',
-                'NOT LIKE',
-            ];
-
-            if (!in_array($operator, $allowedOperators, true)) {
-                throw new \InvalidArgumentException(
-                    "Invalid HAVING operator: {$operator}"
-                );
-            }
-
-            $placeholder =
-                'having_' . count($params);
-
-            $parts[] =
-                $expression .
-                ' ' .
-                $operator .
-                ' :' .
-                $placeholder;
-
-            $params[$placeholder] = $value;
+            return;
         }
 
-        return [
-            'sql' => ' HAVING ' . implode(' AND ', $parts),
-            'params' => $params,
-        ];
+        $relatedModels = $related::getWhereIn(
+            $foreign,
+            array_values($values)
+        );
+
+        $grouped = [];
+
+        foreach ($relatedModels as $relatedModel) {
+            $value = $relatedModel->{$foreign};
+
+            if ($value !== null) {
+                $grouped[(string) $value][] = $relatedModel;
+            }
+        }
+
+        foreach ($models as $model) {
+            $value = $model->{$local};
+
+            if ($value === null) {
+                $model->loadedRelationships[$name] = [];
+                continue;
+            }
+
+            $model->loadedRelationships[$name] =
+                $grouped[(string) $value] ?? [];
+        }
     }
 
-    /*
-     * ---------------------------------------------------------
-     * ORDER BY
-     * ---------------------------------------------------------
-     */
+    protected static function eagerLoadBelongsTo(
+        array $models,
+        string $name,
+        string $related,
+        string $local,
+        string $foreign
+    ): void {
+        $values = [];
 
-    protected static function buildOrderBy(
-        array|string|null $orderBy,
-        bool $aggregate = false
-    ): string {
-        if ($orderBy === null) {
-            /*
-             * Aggregate queries cannot safely default to
-             * ordering by the primary key because it might
-             * not be present in SELECT.
-             */
-
-            if ($aggregate) {
-                return '';
+        foreach ($models as $model) {
+            if (!$model instanceof static) {
+                throw new \InvalidArgumentException(
+                    'Eager-loaded collection contains an invalid model.'
+                );
             }
 
-            $pk = static::primary_key;
+            $value = $model->{$foreign};
 
-            $orderBy = is_array($pk)
-                ? $pk[0]
-                : $pk;
+            if ($value !== null) {
+                $values[(string) $value] = $value;
+            }
         }
 
-        if (is_string($orderBy)) {
-            $orderBy = [
-                $orderBy => 'ASC',
-            ];
+        if ($values === []) {
+            foreach ($models as $model) {
+                $model->loadedRelationships[$name] = null;
+            }
+
+            return;
         }
 
-        if ($orderBy === []) {
-            return '';
+        $relatedModels = $related::getWhereIn(
+            $local,
+            array_values($values)
+        );
+
+        $indexed = [];
+
+        foreach ($relatedModels as $relatedModel) {
+            $value = $relatedModel->{$local};
+
+            if ($value !== null) {
+                $indexed[(string) $value] = $relatedModel;
+            }
         }
 
-        $parts = [];
+        foreach ($models as $model) {
+            $value = $model->{$foreign};
 
-        foreach ($orderBy as $column => $direction) {
-            $column =
-                static::validateColumn((string) $column);
+            if ($value === null) {
+                $model->loadedRelationships[$name] = null;
+                continue;
+            }
 
-            $direction =
-                strtoupper((string) $direction);
+            $model->loadedRelationships[$name] =
+                $indexed[(string) $value] ?? null;
+        }
+    }
 
-            if (!in_array(
-                $direction,
-                ['ASC', 'DESC'],
+    /**
+     * Validate a relationship definition before consuming it.
+     */
+    protected static function validateRelationship(
+        string $name,
+        array $definition
+    ): void {
+        if (!array_key_exists('model', $definition)) {
+            throw new \InvalidArgumentException(
+                "Relationship '{$name}' must define a model."
+            );
+        }
+
+        $model = $definition['model'];
+
+        if (!is_string($model) || $model === '') {
+            throw new \InvalidArgumentException(
+                "Relationship '{$name}' model must be a class name."
+            );
+        }
+
+        if (!class_exists($model)) {
+            throw new \InvalidArgumentException(
+                "Relationship '{$name}' references an invalid model."
+            );
+        }
+
+        if (!is_a($model, self::class, true)) {
+            throw new \InvalidArgumentException(
+                "Relationship '{$name}' model must extend "
+                . self::class . '.'
+            );
+        }
+
+        if (!array_key_exists('type', $definition)) {
+            throw new \InvalidArgumentException(
+                "Relationship '{$name}' must define a type."
+            );
+        }
+
+        $type = $definition['type'];
+
+        if (
+            !is_string($type) ||
+            !in_array(
+                $type,
+                ['hasMany', 'belongsTo'],
                 true
-            )) {
+            )
+        ) {
+            throw new \InvalidArgumentException(
+                "Relationship '{$name}' has an invalid type."
+            );
+        }
+
+        if (!array_key_exists('local', $definition)) {
+            throw new \InvalidArgumentException(
+                "Relationship '{$name}' must define a local key."
+            );
+        }
+
+        if (!array_key_exists('foreign', $definition)) {
+            throw new \InvalidArgumentException(
+                "Relationship '{$name}' must define a foreign key."
+            );
+        }
+
+        $local = $definition['local'];
+        $foreign = $definition['foreign'];
+
+        if (!is_string($local) || !is_string($foreign)) {
+            throw new \InvalidArgumentException(
+                "Relationship '{$name}' keys must be strings."
+            );
+        }
+
+        static::validateColumn($local);
+        static::validateColumn($foreign);
+    }
+
+    public function loadRelationship(
+        string $name,
+        ?array $definition = null
+    ): mixed {
+        if (array_key_exists($name, $this->loadedRelationships)) {
+            return $this->loadedRelationships[$name];
+        }
+
+        if ($definition === null) {
+            if (!array_key_exists($name, $this->relationships)) {
                 throw new \InvalidArgumentException(
-                    'Sort direction must be ASC or DESC.'
+                    "Relationship '{$name}' does not exist."
                 );
             }
 
-            $parts[] =
-                $column . ' ' . $direction;
+            $definition = $this->relationships[$name];
         }
 
-        return ' ORDER BY ' .
-            implode(', ', $parts);
+        if (!is_array($definition)) {
+            throw new \InvalidArgumentException(
+                "Relationship '{$name}' does not have a valid definition."
+            );
+        }
+
+        static::validateRelationship(
+            $name,
+            $definition
+        );
+
+        $related = $definition['model'];
+        $type = $definition['type'];
+        $local = $definition['local'];
+        $foreign = $definition['foreign'];
+
+        if ($type === 'hasMany') {
+            $value = $this->{$local};
+
+            if ($value === null) {
+                return $this->loadedRelationships[$name] = [];
+            }
+
+            return $this->loadedRelationships[$name] =
+                $related::get([
+                    $foreign => $value,
+                ]);
+        }
+
+        $value = $this->{$foreign};
+
+        if ($value === null) {
+            return $this->loadedRelationships[$name] = null;
+        }
+
+        $result = $related::get([
+            $local => $value,
+        ]);
+
+        return $this->loadedRelationships[$name] =
+            $result[0] ?? null;
     }
 
     /*
-     * ---------------------------------------------------------
-     * FETCH PAGE
-     * ---------------------------------------------------------
+     * =========================================================================
+     * FETCHING
+     * =========================================================================
      */
 
     public static function fetchPage(
@@ -664,467 +624,1389 @@ abstract class Model
         array|string|null $select = null,
         array|string|null $groupBy = null,
         array $having = [],
-        array|string|null $orderBy = null
+        array|string|null $orderBy = null,
+        array $joins = []
     ): array {
+        if ($page < 1) {
+            $page = 1;
+        }
+
         if ($pageSize < 1) {
             throw new \InvalidArgumentException(
                 'Page size must be greater than zero.'
             );
         }
 
-        if ($page < 1) {
-            $page = 1;
-        }
-
-        $where = static::buildWhere($wheres);
-        $havingData = static::buildHaving($having);
-
-        $selectSql =
-            static::buildSelect($select);
-
-        $groupBySql =
-            static::buildGroupBy($groupBy);
-
-        /*
-         * Determine whether the result represents entities
-         * or aggregate/grouped data.
-         */
-
-        $aggregate =
-            $groupBySql !== '' ||
-            $havingData['sql'] !== '' ||
-            static::isAggregateSelect($select);
-
-        $orderBySql =
-            static::buildOrderBy(
-                $orderBy,
-                $aggregate
-            );
-
-        $db = static::connection();
         $table = static::table();
 
-        /*
-         * -----------------------------------------------------
-         * Base query
-         * -----------------------------------------------------
-         */
+        $select = static::prepareSelect(
+            $select,
+            $joins
+        );
 
-        $baseSql =
-            'SELECT ' .
-            $selectSql .
-            ' FROM ' .
-            $table .
-            ' WHERE ' .
-            $where['sql'] .
-            $groupBySql .
-            $havingData['sql'];
+        $selectSql = static::buildSelect($select);
 
-        $baseParams = array_merge(
-            $where['params'],
+        $joinData = static::buildJoins($joins);
+        $whereData = static::buildWhere($wheres);
+        $groupData = static::buildGroupBy($groupBy);
+        $havingData = static::buildHaving($having);
+
+        $orderSql = static::buildOrderBy(
+            $orderBy,
+            !empty($joins)
+        );
+
+        $offset = ($page - 1) * $pageSize;
+
+        if ($groupData['sql'] !== '') {
+            $countSql = "
+                SELECT COUNT(*)
+                FROM (
+                    SELECT {$groupData['columns']}
+                    FROM {$table}
+                    {$joinData['sql']}
+                    {$whereData['sql']}
+                    {$groupData['sql']}
+                    {$havingData['sql']}
+                ) AS count_table
+            ";
+        } else {
+            $countSql = "
+                SELECT COUNT(*)
+                FROM {$table}
+                {$joinData['sql']}
+                {$whereData['sql']}
+            ";
+        }
+
+        $countStmt = static::connection()->prepare(
+            $countSql
+        );
+
+        $countStmt->execute(
+            array_merge(
+                $joinData['params'],
+                $whereData['params'],
+                $havingData['params']
+            )
+        );
+
+        $total = (int) $countStmt->fetchColumn();
+
+        $pages = $total === 0
+            ? 0
+            : (int) ceil($total / $pageSize);
+
+        if ($pages > 0 && $page > $pages) {
+            $page = $pages;
+            $offset = ($page - 1) * $pageSize;
+        }
+
+        $sql = "
+            SELECT {$selectSql}
+            FROM {$table}
+            {$joinData['sql']}
+            {$whereData['sql']}
+            {$groupData['sql']}
+            {$havingData['sql']}
+            {$orderSql}
+            LIMIT {$pageSize}
+            OFFSET {$offset}
+        ";
+
+        $params = array_merge(
+            $joinData['params'],
+            $whereData['params'],
             $havingData['params']
         );
 
-        /*
-         * -----------------------------------------------------
-         * Count
-         * -----------------------------------------------------
-         *
-         * Grouped queries must count groups.
-         *
-         * Aggregate queries without GROUP BY produce one
-         * result row, so they are also treated as aggregate.
-         */
+        $stmt = static::connection()->prepare($sql);
 
-        if ($aggregate) {
-            $countSql =
-                'SELECT COUNT(*) FROM (' .
-                $baseSql .
-                ') AS count_query';
+        $stmt->execute($params);
 
-            $countParams = $baseParams;
-        } else {
-            $countSql =
-                'SELECT COUNT(*) FROM ' .
-                $table .
-                ' WHERE ' .
-                $where['sql'];
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            $countParams =
-                $where['params'];
-        }
-
-        $countStmt =
-            $db->prepare($countSql);
-
-        $countStmt->execute(
-            $countParams
-        );
-
-        $totalItems =
-            (int) $countStmt->fetchColumn();
-
-        $totalPages =
-            $totalItems === 0
-            ? 0
-            : (int) ceil(
-                $totalItems / $pageSize
-            );
-
-        /*
-         * Move an out-of-range page to the last page.
-         */
-
-        if (
-            $totalPages > 0 &&
-            $page > $totalPages
-        ) {
-            $page = $totalPages;
-        }
-
-        /*
-         * No results.
-         */
-
-        if ($totalItems === 0) {
-            return [
-                'items' => [],
-                'page' => $page,
-                'pageSize' => $pageSize,
-                'totalItems' => 0,
-                'totalPages' => 0,
-            ];
-        }
-
-        $offset =
-            ($page - 1) * $pageSize;
-
-        /*
-         * -----------------------------------------------------
-         * Final query
-         * -----------------------------------------------------
-         */
-
-        $sql =
-            $baseSql .
-            $orderBySql .
-            ' LIMIT :limit OFFSET :offset';
-
-        $stmt =
-            $db->prepare($sql);
-
-        foreach (
-            $baseParams as $name => $value
-        ) {
-            $stmt->bindValue(
-                ':' . $name,
-                $value
-            );
-        }
-
-        $stmt->bindValue(
-            ':limit',
-            $pageSize,
-            \PDO::PARAM_INT
-        );
-
-        $stmt->bindValue(
-            ':offset',
-            $offset,
-            \PDO::PARAM_INT
-        );
-
-        $stmt->execute();
-
-        $rows =
-            $stmt->fetchAll(
-                \PDO::FETCH_ASSOC
-            );
-
-        /*
-         * Aggregate queries return arrays.
-         *
-         * Normal queries return hydrated models.
-         */
-
-        if ($aggregate) {
+        if (static::isAggregateSelect($select)) {
             $items = $rows;
         } else {
-            $items = array_map(
-                fn(array $row): static =>
-                static::hydrate($row),
-                $rows
-            );
+            $items = [];
+
+            foreach ($rows as $row) {
+                $items[] = static::hydrate($row);
+            }
         }
 
         return [
             'items' => $items,
             'page' => $page,
-            'pageSize' => $pageSize,
-            'totalItems' => $totalItems,
-            'totalPages' => $totalPages,
+            'page_size' => $pageSize,
+            'total' => $total,
+            'pages' => $pages,
         ];
     }
 
-    /*
-     * ---------------------------------------------------------
-     * FIND
-     * ---------------------------------------------------------
-     */
+    public static function find(mixed $id): ?static
+    {
+        $primaryKey = static::primaryKeyDefinition();
 
-    public static function find(
-        mixed $values
-    ): ?static {
-        $pk = static::primary_key;
-        $conditions = [];
-
-        if (is_array($pk)) {
-            if (
-                !is_array($values) ||
-                count($pk) !== count($values)
-            ) {
+        if (is_array($primaryKey)) {
+            if (!is_array($id)) {
                 throw new \InvalidArgumentException(
-                    'Number of values does not match primary key columns.'
+                    'Compound primary key requires an array of values.'
                 );
             }
 
-            foreach (
-                $pk as $index => $column
-            ) {
-                $conditions[$column] =
-                    $values[$index];
+            $wheres = [];
+
+            foreach ($primaryKey as $column) {
+                if (!array_key_exists($column, $id)) {
+                    throw new \InvalidArgumentException(
+                        "Missing primary key value for '{$column}'."
+                    );
+                }
+
+                $wheres[$column] = $id[$column];
             }
         } else {
-            $conditions[$pk] = $values;
+            $wheres = [
+                $primaryKey => $id,
+            ];
         }
 
-        $page = 1;
+        $models = static::get($wheres);
 
-        $result = static::fetchPage(
-            page: $page,
-            pageSize: 1,
-            wheres: $conditions
+        return $models[0] ?? null;
+    }
+
+    /**
+     * Retrieve all matching records.
+     *
+     * Unlike fetchPage(), this query has no artificial LIMIT.
+     */
+    public static function get(
+        array $wheres = [],
+        array|string|null $select = null,
+        array|string|null $groupBy = null,
+        array $having = [],
+        array|string|null $orderBy = null,
+        array $joins = []
+    ): array {
+        $table = static::table();
+
+        $select = static::prepareSelect(
+            $select,
+            $joins
         );
 
-        return $result['items'][0] ?? null;
-    }
+        $selectSql = static::buildSelect($select);
 
-    /*
-     * ---------------------------------------------------------
-     * PRIMARY KEY
-     * ---------------------------------------------------------
-     */
+        $joinData = static::buildJoins($joins);
+        $whereData = static::buildWhere($wheres);
+        $groupData = static::buildGroupBy($groupBy);
+        $havingData = static::buildHaving($having);
 
-    protected function buildPkWhere(): string
-    {
-        $pk = static::primary_key;
+        $orderSql = static::buildOrderBy(
+            $orderBy,
+            !empty($joins)
+        );
 
-        if (is_array($pk)) {
-            return implode(
-                ' AND ',
-                array_map(
-                    fn($column) =>
-                    static::validateColumn(
-                        $column
-                    ) .
-                        " = :$column",
-                    $pk
-                )
-            );
+        $sql = "
+            SELECT {$selectSql}
+            FROM {$table}
+            {$joinData['sql']}
+            {$whereData['sql']}
+            {$groupData['sql']}
+            {$havingData['sql']}
+            {$orderSql}
+        ";
+
+        $params = array_merge(
+            $joinData['params'],
+            $whereData['params'],
+            $havingData['params']
+        );
+
+        $stmt = static::connection()->prepare($sql);
+
+        $stmt->execute($params);
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (static::isAggregateSelect($select)) {
+            return $rows;
         }
 
-        $pk =
-            static::validateColumn($pk);
+        $models = [];
 
-        return "$pk = :$pk";
+        foreach ($rows as $row) {
+            $models[] = static::hydrate($row);
+        }
+
+        return $models;
     }
 
-    protected function getPkParams(): array
-    {
-        return $this->primaryKeyValues;
+    public static function getWhereIn(
+        string $column,
+        array $values
+    ): array {
+        if ($values === []) {
+            return [];
+        }
+
+        static::validateColumn($column);
+
+        $placeholders = implode(
+            ', ',
+            array_fill(0, count($values), '?')
+        );
+
+        $table = static::table();
+
+        $sql = "
+            SELECT {$table}.*
+            FROM {$table}
+            WHERE {$table}.{$column}
+            IN ({$placeholders})
+        ";
+
+        $stmt = static::connection()->prepare($sql);
+
+        $stmt->execute(
+            array_values($values)
+        );
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $models = [];
+
+        foreach ($rows as $row) {
+            $models[] = static::hydrate($row);
+        }
+
+        return $models;
     }
 
     /*
-     * ---------------------------------------------------------
-     * CREATE
-     * ---------------------------------------------------------
+     * =========================================================================
+     * PERSISTENCE
+     * =========================================================================
      */
 
-    public function create(): bool
+    public function create(): static
     {
-        $pk = static::primary_key;
+        $columns = [];
+        $values = [];
 
-        $attributes =
-            $this->attributes;
-
-        if (!is_array($pk)) {
+        foreach ($this->attributes as $column => $value) {
             if (
-                !array_key_exists(
-                    $pk,
-                    $this->primaryKeyValues
-                ) ||
-                $this->primaryKeyValues[$pk] === null
+                $this->fillable !== [] &&
+                !in_array($column, $this->fillable, true)
             ) {
-                unset($attributes[$pk]);
+                continue;
             }
+
+            if (!is_string($column)) {
+                throw new \InvalidArgumentException(
+                    'Model attribute names must be strings.'
+                );
+            }
+
+            static::validateColumn($column);
+
+            $columns[] = $column;
+            $values[] = $value;
         }
 
-        if ($attributes === []) {
-            throw new \Exception(
-                'Cannot create model without attributes.'
+        if ($columns === []) {
+            throw new \InvalidArgumentException(
+                'No attributes available for insertion.'
             );
         }
 
-        $columns =
-            array_keys($attributes);
+        $table = static::table();
 
-        $placeholders = array_map(
-            fn($column) => ':' . $column,
+        $columnSql = implode(
+            ', ',
             $columns
         );
 
-        $sql =
-            'INSERT INTO ' .
-            static::table() .
-            ' (' .
-            implode(', ', $columns) .
-            ') VALUES (' .
-            implode(', ', $placeholders) .
-            ')';
+        $placeholders = implode(
+            ', ',
+            array_fill(
+                0,
+                count($values),
+                '?'
+            )
+        );
 
-        $stmt =
-            static::connection()->prepare($sql);
-
-        $success =
-            $stmt->execute($attributes);
-
-        if (
-            $success &&
-            !is_array($pk)
-        ) {
-            $id =
-                static::connection()->lastInsertId();
-
-            if (
-                $id !== '' &&
-                $id !== '0'
-            ) {
-                $this->primaryKeyValues[$pk] =
-                    $id;
-
-                $this->attributes[$pk] =
-                    $id;
-            }
-        }
-
-        return $success;
-    }
-
-    public static function get(array $conditions = []): array
-    {
-        $where = static::buildWhere($conditions);
-
-        $sql = 'SELECT * FROM ' . static::table();
-
-        if ($where['sql'] !== '') {
-            $sql .= ' WHERE ' . $where['sql'];
-        }
+        $sql = "
+            INSERT INTO {$table}
+            ({$columnSql})
+            VALUES ({$placeholders})
+        ";
 
         $stmt = static::connection()->prepare($sql);
-        $stmt->execute($where['params']);
 
-        return array_map(
-            fn(array $row) => static::hydrate($row),
-            $stmt->fetchAll(\PDO::FETCH_ASSOC)
-        );
+        $stmt->execute($values);
+
+        $primaryKey = static::primaryKeyDefinition();
+
+        if (
+            is_string($primaryKey) &&
+            !array_key_exists(
+                $primaryKey,
+                $this->attributes
+            )
+        ) {
+            $this->attributes[$primaryKey] =
+                static::connection()->lastInsertId();
+        }
+
+        $this->refreshPrimaryKeyValues();
+
+        return $this;
     }
 
     public static function createOne(
         array $attributes
     ): static {
-        $model =
-            new static($attributes);
+        $model = new static($attributes);
 
-        $model->create();
+        return $model->create();
+    }
+
+    public function update(
+        ?array $attributes = null
+    ): static {
+        if ($attributes !== null) {
+            foreach ($attributes as $key => $value) {
+                if (!is_string($key)) {
+                    throw new \InvalidArgumentException(
+                        'Model attribute names must be strings.'
+                    );
+                }
+
+                $this->{$key} = $value;
+            }
+        }
+
+        if ($this->primaryKeyValues === []) {
+            $this->refreshPrimaryKeyValues();
+        }
+
+        if ($this->primaryKeyValues === []) {
+            throw new \RuntimeException(
+                'Cannot update a model without a primary key.'
+            );
+        }
+
+        $sets = [];
+        $values = [];
+
+        $primaryKey = static::primaryKeyDefinition();
+
+        foreach ($this->attributes as $column => $value) {
+            if (!is_string($column)) {
+                throw new \InvalidArgumentException(
+                    'Model attribute names must be strings.'
+                );
+            }
+
+            if (
+                $this->fillable !== [] &&
+                !in_array($column, $this->fillable, true)
+            ) {
+                continue;
+            }
+
+            if (
+                is_array($primaryKey)
+                ? in_array($column, $primaryKey, true)
+                : $column === $primaryKey
+            ) {
+                continue;
+            }
+
+            static::validateColumn($column);
+
+            $sets[] = "{$column} = ?";
+            $values[] = $value;
+        }
+
+        if ($sets === []) {
+            return $this;
+        }
+
+        $where = static::buildPkWhere(
+            $this->primaryKeyValues
+        );
+
+        $sql = "
+            UPDATE " . static::table() . "
+            SET " . implode(', ', $sets) . "
+            {$where['sql']}
+        ";
+
+        $stmt = static::connection()->prepare($sql);
+
+        $stmt->execute(
+            array_merge(
+                $values,
+                $where['params']
+            )
+        );
+
+        return $this;
+    }
+
+    public function delete(): bool
+    {
+        if ($this->primaryKeyValues === []) {
+            $this->refreshPrimaryKeyValues();
+        }
+
+        if ($this->primaryKeyValues === []) {
+            throw new \RuntimeException(
+                'Cannot delete a model without a primary key.'
+            );
+        }
+
+        $where = static::buildPkWhere(
+            $this->primaryKeyValues
+        );
+
+        $sql = "
+            DELETE FROM " . static::table() . "
+            {$where['sql']}
+        ";
+
+        $stmt = static::connection()->prepare($sql);
+
+        return $stmt->execute(
+            $where['params']
+        );
+    }
+
+    /*
+     * =========================================================================
+     * HYDRATION
+     * =========================================================================
+     */
+
+    protected static function hydrate(
+        array $row
+    ): static {
+        $model = new static();
+
+        $model->attributes = $row;
+
+        $model->refreshPrimaryKeyValues();
 
         return $model;
     }
 
-    /*
-     * ---------------------------------------------------------
-     * UPDATE
-     * ---------------------------------------------------------
-     */
-
-    public function update(): bool
+    protected function refreshPrimaryKeyValues(): void
     {
-        $attributes =
-            $this->attributes;
+        $this->primaryKeyValues = [];
 
-        $pk = static::primary_key;
+        $primaryKey = static::primaryKeyDefinition();
 
-        if (is_array($pk)) {
-            foreach ($pk as $column) {
-                unset($attributes[$column]);
+        if (is_array($primaryKey)) {
+            foreach ($primaryKey as $column) {
+                if (
+                    array_key_exists(
+                        $column,
+                        $this->attributes
+                    )
+                ) {
+                    $this->primaryKeyValues[$column] =
+                        $this->attributes[$column];
+                }
             }
-        } else {
-            unset($attributes[$pk]);
+
+            return;
         }
 
-        if ($attributes === []) {
-            return true;
-        }
-
-        $setStr = implode(
-            ', ',
-            array_map(
-                fn($column) =>
-                static::validateColumn(
-                    $column
-                ) .
-                    " = :$column",
-                array_keys($attributes)
+        if (
+            array_key_exists(
+                $primaryKey,
+                $this->attributes
             )
-        );
-
-        $sql =
-            'UPDATE ' .
-            static::table() .
-            ' SET ' .
-            $setStr .
-            ' WHERE ' .
-            $this->buildPkWhere();
-
-        $params = array_merge(
-            $attributes,
-            $this->getPkParams()
-        );
-
-        $stmt =
-            static::connection()->prepare($sql);
-
-        return $stmt->execute($params);
+        ) {
+            $this->primaryKeyValues[$primaryKey] =
+                $this->attributes[$primaryKey];
+        }
     }
 
     /*
-     * ---------------------------------------------------------
-     * DELETE
-     * ---------------------------------------------------------
+     * =========================================================================
+     * WHERE
+     * =========================================================================
      */
 
-    public function delete(): bool
-    {
-        $sql =
-            'DELETE FROM ' .
-            static::table() .
-            ' WHERE ' .
-            $this->buildPkWhere();
+    protected static function buildWhere(
+        array $wheres
+    ): array {
+        if ($wheres === []) {
+            return [
+                'sql' => '',
+                'params' => [],
+            ];
+        }
 
-        $stmt =
-            static::connection()->prepare($sql);
+        $conditions = [];
+        $params = [];
 
-        return $stmt->execute(
-            $this->getPkParams()
+        foreach ($wheres as $column => $value) {
+            if (!is_string($column)) {
+                throw new \InvalidArgumentException(
+                    'WHERE column names must be strings.'
+                );
+            }
+
+            static::validateColumn($column);
+
+            if (
+                is_array($value) &&
+                count($value) === 2 &&
+                array_key_exists(0, $value) &&
+                is_string($value[0])
+            ) {
+                $operator = strtoupper(
+                    trim($value[0])
+                );
+
+                $operator = match ($operator) {
+                    '=', '==', '!=', '<>', '<',
+                    '<=', '>', '>='
+                        => $operator,
+
+                    'LIKE', 'NOT LIKE',
+                    'IN', 'NOT IN',
+                    'IS', 'IS NOT'
+                        => $operator,
+
+                    default => throw new \InvalidArgumentException(
+                        "Invalid WHERE operator '{$operator}'."
+                    ),
+                };
+
+                $operand = $value[1];
+
+                if (
+                    in_array(
+                        $operator,
+                        ['IS', 'IS NOT'],
+                        true
+                    )
+                ) {
+                    if ($operand !== null) {
+                        throw new \InvalidArgumentException(
+                            "{$operator} only accepts NULL."
+                        );
+                    }
+
+                    $conditions[] =
+                        "{$column} {$operator} NULL";
+
+                    continue;
+                }
+
+                if (
+                    in_array(
+                        $operator,
+                        ['IN', 'NOT IN'],
+                        true
+                    )
+                ) {
+                    if (!is_array($operand)) {
+                        throw new \InvalidArgumentException(
+                            "{$operator} requires an array."
+                        );
+                    }
+
+                    if ($operand === []) {
+                        $conditions[] =
+                            $operator === 'IN'
+                                ? '0'
+                                : '1';
+
+                        continue;
+                    }
+
+                    $placeholders = implode(
+                        ', ',
+                        array_fill(
+                            0,
+                            count($operand),
+                            '?'
+                        )
+                    );
+
+                    $conditions[] =
+                        "{$column} {$operator} ({$placeholders})";
+
+                    foreach ($operand as $item) {
+                        $params[] = $item;
+                    }
+
+                    continue;
+                }
+
+                if ($operand === null) {
+                    $conditions[] =
+                        $operator === '!=' ||
+                        $operator === '<>'
+                            ? "{$column} IS NOT NULL"
+                            : "{$column} IS NULL";
+
+                    continue;
+                }
+
+                $conditions[] =
+                    "{$column} {$operator} ?";
+
+                $params[] = $operand;
+
+                continue;
+            }
+
+            if ($value === null) {
+                $conditions[] =
+                    "{$column} IS NULL";
+
+                continue;
+            }
+
+            $conditions[] =
+                "{$column} = ?";
+
+            $params[] = $value;
+        }
+
+        return [
+            'sql' => ' WHERE ' . implode(
+                ' AND ',
+                $conditions
+            ),
+            'params' => $params,
+        ];
+    }
+
+    /*
+     * =========================================================================
+     * SELECT
+     * =========================================================================
+     */
+
+    /**
+     * Build the default SELECT list.
+     *
+     * When SELECT is omitted, the base table's columns are selected.
+     *
+     * JOIN definitions may optionally provide:
+     *
+     * 'columns' => ['name', 'email']
+     */
+    protected static function prepareSelect(
+        array|string|null $select,
+        array $joins
+    ): array|string {
+        if ($select !== null) {
+            return $select;
+        }
+
+        $table = static::table();
+
+        $columns = [
+            "{$table}.*",
+        ];
+
+        foreach ($joins as $join) {
+            if (!is_array($join)) {
+                throw new \InvalidArgumentException(
+                    'Each JOIN definition must be an array.'
+                );
+            }
+
+            if (!array_key_exists('model', $join)) {
+                throw new \InvalidArgumentException(
+                    'Join must define a model.'
+                );
+            }
+
+            $model = $join['model'];
+
+            if (!is_string($model)) {
+                throw new \InvalidArgumentException(
+                    'Join model must be a class name.'
+                );
+            }
+
+            if (!class_exists($model)) {
+                throw new \InvalidArgumentException(
+                    'Join model class does not exist.'
+                );
+            }
+
+            if (!is_a($model, self::class, true)) {
+                throw new \InvalidArgumentException(
+                    'Join model must extend ' . self::class . '.'
+                );
+            }
+
+            if (!array_key_exists('columns', $join)) {
+                continue;
+            }
+
+            $joinColumns = $join['columns'];
+
+            if (
+                !is_string($joinColumns) &&
+                !is_array($joinColumns)
+            ) {
+                throw new \InvalidArgumentException(
+                    'JOIN columns must be a string or array.'
+                );
+            }
+
+            $joinColumns = is_array($joinColumns)
+                ? $joinColumns
+                : [$joinColumns];
+
+            $joinTable = $model::table();
+
+            foreach ($joinColumns as $column) {
+                if (!is_string($column)) {
+                    throw new \InvalidArgumentException(
+                        'JOIN columns must be strings.'
+                    );
+                }
+
+                static::validateColumn($column);
+
+                $columns[] =
+                    "{$joinTable}.{$column}";
+            }
+        }
+
+        return $columns;
+    }
+
+    protected static function buildSelect(
+        array|string $select
+    ): string {
+        if (is_string($select)) {
+            if (trim($select) === '') {
+                throw new \InvalidArgumentException(
+                    'SELECT expression cannot be empty.'
+                );
+            }
+
+            return $select;
+        }
+
+        if ($select === []) {
+            throw new \InvalidArgumentException(
+                'SELECT list cannot be empty.'
+            );
+        }
+
+        foreach ($select as $column) {
+            if (!is_string($column)) {
+                throw new \InvalidArgumentException(
+                    'SELECT expressions must be strings.'
+                );
+            }
+        }
+
+        return implode(', ', $select);
+    }
+
+    protected static function isAggregateSelect(
+        array|string|null $select
+    ): bool {
+        if ($select === null) {
+            return false;
+        }
+
+        $columns = is_array($select)
+            ? $select
+            : [$select];
+
+        foreach ($columns as $column) {
+            if (!is_string($column)) {
+                continue;
+            }
+
+            if (
+                preg_match(
+                    '/\b(COUNT|SUM|AVG|MIN|MAX)\s*\(/i',
+                    $column
+                ) === 1
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /*
+     * =========================================================================
+     * GROUP BY
+     * =========================================================================
+     */
+
+    /**
+     * Always returns:
+     *
+     * [
+     *     'columns' => string,
+     *     'sql' => string,
+     * ]
+     */
+    protected static function buildGroupBy(
+        array|string|null $groupBy
+    ): array {
+        if ($groupBy === null) {
+            return [
+                'columns' => '',
+                'sql' => '',
+            ];
+        }
+
+        $columns = is_array($groupBy)
+            ? $groupBy
+            : [$groupBy];
+
+        if ($columns === []) {
+            throw new \InvalidArgumentException(
+                'GROUP BY list cannot be empty.'
+            );
+        }
+
+        foreach ($columns as $column) {
+            if (!is_string($column)) {
+                throw new \InvalidArgumentException(
+                    'GROUP BY columns must be strings.'
+                );
+            }
+
+            static::validateColumn($column);
+        }
+
+        $columnsSql = implode(
+            ', ',
+            $columns
         );
+
+        return [
+            'columns' => $columnsSql,
+            'sql' => ' GROUP BY ' . $columnsSql,
+        ];
+    }
+
+    /*
+     * =========================================================================
+     * HAVING
+     * =========================================================================
+     */
+
+    protected static function buildHaving(
+        array $having
+    ): array {
+        if ($having === []) {
+            return [
+                'sql' => '',
+                'params' => [],
+            ];
+        }
+
+        $conditions = [];
+        $params = [];
+
+        foreach ($having as $column => $value) {
+            if (!is_string($column)) {
+                throw new \InvalidArgumentException(
+                    'HAVING column names must be strings.'
+                );
+            }
+
+            static::validateColumn($column);
+
+            if (
+                is_array($value) &&
+                count($value) === 2 &&
+                array_key_exists(0, $value)
+            ) {
+                if (!is_string($value[0])) {
+                    throw new \InvalidArgumentException(
+                        'HAVING operator must be a string.'
+                    );
+                }
+
+                $operator = strtoupper(
+                    trim($value[0])
+                );
+
+                $allowed = [
+                    '=', '!=', '<>', '<',
+                    '<=', '>', '>=',
+                    'LIKE', 'NOT LIKE',
+                ];
+
+                if (!in_array(
+                    $operator,
+                    $allowed,
+                    true
+                )) {
+                    throw new \InvalidArgumentException(
+                        "Invalid HAVING operator '{$operator}'."
+                    );
+                }
+
+                $conditions[] =
+                    "{$column} {$operator} ?";
+
+                $params[] = $value[1];
+
+                continue;
+            }
+
+            $conditions[] =
+                "{$column} = ?";
+
+            $params[] = $value;
+        }
+
+        return [
+            'sql' => ' HAVING ' . implode(
+                ' AND ',
+                $conditions
+            ),
+            'params' => $params,
+        ];
+    }
+
+    /*
+     * =========================================================================
+     * ORDER BY
+     * =========================================================================
+     */
+
+    protected static function buildOrderBy(
+        array|string|null $orderBy,
+        bool $qualified = false
+    ): string {
+        if ($orderBy === null) {
+            $primaryKey = static::primaryKeyDefinition();
+
+            if (is_array($primaryKey)) {
+                $primaryKey = $primaryKey[0];
+            }
+
+            $column = $qualified
+                ? static::table() . '.' . $primaryKey
+                : $primaryKey;
+
+            return " ORDER BY {$column} ASC";
+        }
+
+        if (
+            is_array($orderBy) &&
+            $orderBy === []
+        ) {
+            return '';
+        }
+
+        $orders = [];
+
+        if (is_string($orderBy)) {
+            if (trim($orderBy) === '') {
+                return '';
+            }
+
+            /*
+             * Preserve the existing API where a string is treated
+             * as an already-built ORDER BY expression.
+             */
+            $orders[] = $orderBy;
+        } else {
+            foreach ($orderBy as $column => $direction) {
+                if (!is_string($column)) {
+                    throw new \InvalidArgumentException(
+                        'ORDER BY column names must be strings.'
+                    );
+                }
+
+                static::validateColumn($column);
+
+                if (!is_string($direction)) {
+                    throw new \InvalidArgumentException(
+                        'ORDER BY direction must be a string.'
+                    );
+                }
+
+                $direction = strtoupper(
+                    trim($direction)
+                );
+
+                if (!in_array(
+                    $direction,
+                    ['ASC', 'DESC'],
+                    true
+                )) {
+                    throw new \InvalidArgumentException(
+                        'ORDER BY direction must be ASC or DESC.'
+                    );
+                }
+
+                $orders[] =
+                    "{$column} {$direction}";
+            }
+        }
+
+        if ($orders === []) {
+            return '';
+        }
+
+        return ' ORDER BY ' . implode(
+            ', ',
+            $orders
+        );
+    }
+
+    /*
+     * =========================================================================
+     * JOIN
+     * =========================================================================
+     */
+
+    protected static function buildJoins(
+        array $joins
+    ): array {
+        if ($joins === []) {
+            return [
+                'sql' => '',
+                'params' => [],
+            ];
+        }
+
+        $sql = '';
+
+        foreach ($joins as $join) {
+            if (!is_array($join)) {
+                throw new \InvalidArgumentException(
+                    'Each JOIN definition must be an array.'
+                );
+            }
+
+            if (!array_key_exists('model', $join)) {
+                throw new \InvalidArgumentException(
+                    'Join must define a model.'
+                );
+            }
+
+            $model = $join['model'];
+
+            if (!is_string($model)) {
+                throw new \InvalidArgumentException(
+                    'Join model must be a class name.'
+                );
+            }
+
+            if (!class_exists($model)) {
+                throw new \InvalidArgumentException(
+                    'Join model class does not exist.'
+                );
+            }
+
+            if (!is_a($model, self::class, true)) {
+                throw new \InvalidArgumentException(
+                    'Join model must extend ' . self::class . '.'
+                );
+            }
+
+            $type = $join['type'] ?? 'INNER';
+
+            if (!is_string($type)) {
+                throw new \InvalidArgumentException(
+                    'JOIN type must be a string.'
+                );
+            }
+
+            $type = strtoupper(
+                trim($type)
+            );
+
+            if (!in_array(
+                $type,
+                ['INNER', 'LEFT', 'RIGHT'],
+                true
+            )) {
+                throw new \InvalidArgumentException(
+                    "Unsupported JOIN type '{$type}'."
+                );
+            }
+
+            $local = $join['local']
+                ?? static::primaryKeyDefinition();
+
+            $foreign = $join['foreign']
+                ?? $model::primaryKeyDefinition();
+
+            if (
+                !is_string($local) &&
+                !is_array($local)
+            ) {
+                throw new \InvalidArgumentException(
+                    'JOIN local key must be a string or array.'
+                );
+            }
+
+            if (
+                !is_string($foreign) &&
+                !is_array($foreign)
+            ) {
+                throw new \InvalidArgumentException(
+                    'JOIN foreign key must be a string or array.'
+                );
+            }
+
+            if (
+                is_array($local) !==
+                is_array($foreign)
+            ) {
+                throw new \InvalidArgumentException(
+                    'JOIN local and foreign keys must both be arrays '
+                    . 'or both be scalar values.'
+                );
+            }
+
+            $local = is_array($local)
+                ? $local
+                : [$local];
+
+            $foreign = is_array($foreign)
+                ? $foreign
+                : [$foreign];
+
+            if (
+                $local === [] ||
+                $foreign === []
+            ) {
+                throw new \InvalidArgumentException(
+                    'JOIN keys cannot be empty.'
+                );
+            }
+
+            if (
+                count($local) !==
+                count($foreign)
+            ) {
+                throw new \InvalidArgumentException(
+                    'JOIN local and foreign keys must contain '
+                    . 'the same number of columns.'
+                );
+            }
+
+            $conditions = [];
+
+            foreach ($local as $index => $localColumn) {
+                if (!is_string($localColumn)) {
+                    throw new \InvalidArgumentException(
+                        'JOIN local columns must be strings.'
+                    );
+                }
+
+                $foreignColumn = $foreign[$index] ?? null;
+
+                if (!is_string($foreignColumn)) {
+                    throw new \InvalidArgumentException(
+                        'JOIN foreign columns must be strings.'
+                    );
+                }
+
+                static::validateColumn(
+                    $localColumn
+                );
+
+                static::validateColumn(
+                    $foreignColumn
+                );
+
+                $conditions[] =
+                    static::table()
+                    . '.' . $localColumn
+                    . ' = '
+                    . $model::table()
+                    . '.' . $foreignColumn;
+            }
+
+            $sql .= sprintf(
+                ' %s JOIN %s ON %s',
+                $type,
+                $model::table(),
+                implode(
+                    ' AND ',
+                    $conditions
+                )
+            );
+        }
+
+        return [
+            'sql' => $sql,
+            'params' => [],
+        ];
+    }
+
+    /*
+     * =========================================================================
+     * PRIMARY KEY
+     * =========================================================================
+     */
+
+    /**
+     * Get and validate the primary-key definition.
+     *
+     * static::primary_key is resolved using late static binding.
+     */
+    protected static function primaryKeyDefinition(): string|array
+    {
+        $primaryKey = static::primary_key;
+
+        if (is_string($primaryKey)) {
+            if ($primaryKey === '') {
+                throw new \LogicException(
+                    static::class
+                    . ' has an empty primary key.'
+                );
+            }
+
+            static::validateIdentifier(
+                $primaryKey
+            );
+
+            return $primaryKey;
+        }
+
+        if (
+            !is_array($primaryKey) ||
+            $primaryKey === []
+        ) {
+            throw new \LogicException(
+                static::class
+                . ' must define primary_key as a string '
+                . 'or non-empty array.'
+            );
+        }
+
+        foreach ($primaryKey as $column) {
+            if (!is_string($column)) {
+                throw new \LogicException(
+                    static::class
+                    . ' primary_key array must contain '
+                    . 'only strings.'
+                );
+            }
+
+            static::validateIdentifier(
+                $column
+            );
+        }
+
+        return $primaryKey;
+    }
+
+    protected static function buildPkWhere(
+        array $values
+    ): array {
+        if ($values === []) {
+            throw new \InvalidArgumentException(
+                'Primary key values cannot be empty.'
+            );
+        }
+
+        $conditions = [];
+        $params = [];
+
+        foreach ($values as $column => $value) {
+            if (!is_string($column)) {
+                throw new \InvalidArgumentException(
+                    'Primary key column names must be strings.'
+                );
+            }
+
+            static::validateColumn(
+                $column
+            );
+
+            $conditions[] =
+                "{$column} = ?";
+
+            $params[] = $value;
+        }
+
+        return [
+            'sql' => ' WHERE ' . implode(
+                ' AND ',
+                $conditions
+            ),
+            'params' => $params,
+        ];
+    }
+
+    protected static function getPkParams(
+        array $values
+    ): array {
+        return array_values($values);
+    }
+
+    /*
+     * =========================================================================
+     * VALIDATION
+     * =========================================================================
+     */
+
+    protected static function validateColumn(
+        mixed $column
+    ): void {
+        if (!is_string($column)) {
+            throw new \InvalidArgumentException(
+                'Column name must be a string.'
+            );
+        }
+
+        if (!static::isValidIdentifier($column)) {
+            throw new \InvalidArgumentException(
+                "Invalid column name '{$column}'."
+            );
+        }
+    }
+
+    protected static function validateIdentifier(
+        mixed $identifier
+    ): void {
+        if (!is_string($identifier)) {
+            throw new \InvalidArgumentException(
+                'Identifier must be a string.'
+            );
+        }
+
+        if (!static::isValidIdentifier($identifier)) {
+            throw new \InvalidArgumentException(
+                "Invalid identifier '{$identifier}'."
+            );
+        }
+    }
+
+    protected static function isValidIdentifier(
+        string $identifier
+    ): bool {
+        return preg_match(
+            '/^[A-Za-z_][A-Za-z0-9_]*$/',
+            $identifier
+        ) === 1;
     }
 }
