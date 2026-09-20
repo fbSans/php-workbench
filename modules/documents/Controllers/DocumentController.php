@@ -9,6 +9,7 @@ use function Helpers\view;
 
 use Base\Request;
 use Base\Response;
+use Base\Session;
 use Documents\Models\Document;
 use Documents\Models\File;
 
@@ -18,17 +19,33 @@ class DocumentController extends Controller
     {
         $page = $request->input('page', 1);
         $documents = Document::fetchPage($page, 20);
+        
+        $error_message = '';
+        $sucess_message = '';
+        if(Session::has('errors') && isset(Session::get('errors')['message'])){
+            $error_message = Session::get('errors')['message'];
+        } else if (Session::has('data') && isset(Session::get('data')['message'])) {
+            $sucess_message = Session::get('data')['message'];
+        }
 
-        return view('documents/index.html.twig', compact('documents'));
+        $parent_id = Session::get('parent_id');
+
+        return view('documents/index.html.twig', 
+            compact(
+                'documents',
+                'error_message',
+                'sucess_message',
+                'parent_id'
+            ));
     }
 
-    public function save(Request $request)
+    public function save(Request $request): Response
     {
         $file_metadata = $this->uploadFile('/documents', 'file');
 
         if(isset($file_metadata['errors'])) {
-            $_SESSION['errors'] = $file_metadata['errors'];
-            $_SESSION['parent_id'] = $request->input('parent_id', null);
+            Session::set('errors', $file_metadata['errors']);
+            Session::set('parent_id', $request->input('parent_id', null));
             return Response::redirect('/documents');
         }
 
@@ -44,6 +61,15 @@ class DocumentController extends Controller
 
             return $document->create();
         };
+
+        $filecontroller = new FileController();
+        return $filecontroller->save(
+                                $request,
+                                $file_metadata['size'],
+                                $file_metadata['storage_size'],
+                                $make_submodel,
+                                $unwind
+                            );
     }
 
 

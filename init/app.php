@@ -3,10 +3,11 @@ namespace Init;
 
 use Base\View;
 use Base\Model;
+use Base\Session;
 use Config\Config;
 class Init {
     public static function init(){
-        session_start();
+        Session::start();
         //Initialize the Template manager
         View::init(dirname(__DIR__) . '/views');
         //Initialize database connection

@@ -1,10 +1,9 @@
 <?php
 namespace Users\Controllers;
 
-use Base\View;
 use Base\Request;
 use Base\Response;
-use Routes\Route;
+use Base\Session;
 use Users\Models\User;
 
 use function Helpers\clean_input;
@@ -16,9 +15,9 @@ class UserController {
     public function login_page()
     {
         $context = [];
-        if(isset($_SESSION['errors'])) {
-            $context['errors'] = $_SESSION['errors'];
-            unset($_SESSION['errors']);
+        if(Session::has('errors')) {
+            $context['errors'] = Session::get('errors');
+            Session::unset('errors');
         }
         return view("authentication/login.html.twig", $context);
     }
@@ -51,18 +50,18 @@ class UserController {
 
         if($verified) {
             assert(isset($user));
-            $_SESSION['user_id'] = $user->id;
-            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            Session::set('user_id', $user->id);
+            Session::set('csrf_token', bin2hex(random_bytes(32)));
             return Response::redirect('/');
         } else {
-            $_SESSION['errors'] = $context['errors'];
+            Session::set('errors', $context['errors']);
             return Response::redirect('/login');
         }
     }
 
     public function logout()
     {
-        session_destroy();
+        Session::destroy();
         return Response::redirect('/login');
     }
 }
