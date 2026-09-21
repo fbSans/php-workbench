@@ -35,6 +35,12 @@ class File extends Model{
             'local' => 'id',
             'foreign' => 'id',
         ],
+        'directory' => [
+            'type' => 'hasOne',
+            'model' => Directory::class,
+            'local' => 'id',
+            'foreign' => 'id',
+        ],
     ];
 }
 

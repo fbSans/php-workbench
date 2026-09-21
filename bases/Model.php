@@ -867,9 +867,9 @@ abstract class Model
     }
 
     /**
-     * Retrieve all matching records.
+     * Retrieve all matching records, unless limit is imposed.
      *
-     * Unlike fetchPage(), this query has no artificial LIMIT.
+     *
      */
     public static function get(
         array $wheres = [],
@@ -877,7 +877,8 @@ abstract class Model
         array|string|null $groupBy = null,
         array $having = [],
         array|string|null $orderBy = null,
-        array $joins = []
+        array $joins = [],
+        int $limit = -1,
     ): array {
         $table = static::table();
 
@@ -892,6 +893,7 @@ abstract class Model
         $whereData = static::buildWhere($wheres);
         $groupData = static::buildGroupBy($groupBy);
         $havingData = static::buildHaving($having);
+        $limitData = $limit > 0 ? "LIMIT {$limit} "  : '';
 
         $orderSql = static::buildOrderBy(
             $orderBy,
@@ -906,6 +908,7 @@ abstract class Model
             {$groupData['sql']}
             {$havingData['sql']}
             {$orderSql}
+            {$limitData}
         ";
 
         $params = array_merge(
@@ -933,15 +936,16 @@ abstract class Model
         return $models;
     }
 
-    public static function first()
+    public static function first( 
+        array $wheres = [],
+        array|string|null $select = null,
+        array|string|null $groupBy = null,
+        array $having = [],
+        array|string|null $orderBy = null,
+        array $joins = [],
+    )
     {
-        $sql = "SELECT * FROM " . static::table() . " LIMIT 1";
-        $stmt = static::connection()->prepare($sql);
-        $stmt->execute();
-        $rows = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if (!$rows) return null;
-        return static::hydrate($rows);
+        return static::get($wheres, $select, $groupBy, $having, $orderBy, $joins, limit: 1)[0] ?? null;
     }
 
     public static function getWhereIn(

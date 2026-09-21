@@ -13,7 +13,7 @@ use function Helpers\auth_user;
 
 class FileController
 {
-    public function save(Request $request, array $metadata, callable $make_submodel, callable $unwind): Response
+    public function save(Request $request, array $metadata, ?callable $make_submodel = null, ?callable $unwind = null): Response
     {
         $parent_id = $request->input('parent_id', null);
         $parent_group_id = null;

@@ -7,6 +7,44 @@ use function Helpers\join_paths;
 
 class Storage
 {
+    public static function exists(string $name){
+        $storage_dir = Config::get('STORAGE_DIR');
+
+        if(!file_exists($storage_dir)) return false;
+
+        $name = str_replace('\\', '/', $name);
+
+        if (
+            $name === '' ||
+            str_starts_with($name, '/') ||
+            str_contains($name, "\0")
+        ) {
+            return false;
+        }
+
+        $parts = explode('/', $name);
+
+        foreach ($parts as $part) {
+            if ($part === '' || $part === '.') {
+                continue;
+            }
+
+            if ($part === '..') {
+                return false;
+            }
+        }
+
+        $storage_dir = realpath($storage_dir);
+
+        if ($storage_dir === false) {
+            return false;
+        }
+
+        $path = join_paths($storage_dir, $name);
+
+        return file_exists($path);
+    }
+
     public static function makedirIfNotExists(
         string $dirname,
         int $permissions = 0755

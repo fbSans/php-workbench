@@ -45,7 +45,11 @@ class ModelQuery
     /**
      * Retrieve the models and eager-load the requested relationships.
      */
-    public function get(): array
+    public function get(
+        array $wheres = [],
+        array|string|null $orderBy = null,
+        int $limit = -1,
+    ): array
     {
         $model = $this->model;
 
@@ -56,11 +60,37 @@ class ModelQuery
          * contract here instead of introducing another query
          * implementation.
          */
-        $models = $model::get();
+        $models = $model::get(wheres: $wheres, orderBy: $orderBy, limit: $limit);
 
         return $model::load(
             $models,
             $this->relationships
         );
+    }
+
+     /**
+     * Retrieve the models and eager-load the requested relationships.
+     */
+    public function first(
+        array $wheres = [],
+        array|string|null $orderBy = null,
+    ): mixed
+    {
+        $model = $this->model;
+
+        /*
+         * Important:
+         *
+         * We deliberately call the existing Model::get()
+         * contract here instead of introducing another query
+         * implementation.
+         */
+        $model = $model::first(wheres: $wheres, orderBy: $orderBy);
+        if(!$model) return null;
+
+        return $model::load(
+            [$model],
+            $this->relationships
+        )[0] ?? null;
     }
 }
