@@ -11,6 +11,7 @@ use Base\Request;
 use Base\Response;
 use Base\Session;
 use Base\Storage;
+use Documents\Models\Directory;
 use Documents\Models\Document;
 use Documents\Models\File;
 
@@ -18,13 +19,19 @@ class DocumentController extends Controller
 {
     public function index(Request $request)
     {
+        $now = time();
         $page = $request->input('page', 1);
 
-        $documents = Document::fetchPage($page, 20);
-
-        $documents['items'] = Document::load(
-            $documents['items'],
-            'file'
+        
+        $files = File::fetchPage($page, 20, ['parent_id' => $request->input('parent_id')]);
+        foreach($files['items'] as $file){
+            /** @var File $file */
+            $file->update(['accessed_at' => date('Y-m-d H:i:s')]);
+        }
+        
+        $files['items'] = File::load(
+            $files['items'],
+            ['document', 'directory'],
         );
 
         $error_message = '';
@@ -52,7 +59,7 @@ class DocumentController extends Controller
         return view(
             'documents/index.html.twig',
             compact(
-                'documents',
+                'files',
                 'error_message',
                 'success_message',
                 'parent_id'

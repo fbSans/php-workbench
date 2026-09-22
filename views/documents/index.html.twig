@@ -31,32 +31,72 @@
             <!-- File list -->
             <div class="bg-secondary bg-opacity-25 rounded-3 overflow-hidden">
 
-                {% for document in documents.items %}
+                {% for file in files.items %}
+                    {% if file.document %}                   
+                        <div class="d-flex align-items-center justify-content-between px-3 py-3 border-bottom border-secondary file-item">
 
-                    <div class="d-flex align-items-center justify-content-between px-3 py-3 border-bottom border-secondary file-item">
+                            <div class="text-truncate" style="min-width: 0;">
+                                <div class="text-truncate" title="{{ file.name }}">{{ file.name }}</div>
+                                <small class="text-white-50">{{ file.document.mime_type }}</small>
+                            </div>
 
-                        <div class="text-truncate" style="min-width: 0;">
-                            <div class="text-truncate" title="{{ document.file.name }}">{{ document.file.name }}</div>
-                            <small class="text-white-50">{{ document.mime_type }}</small>
-                        </div>
+                            <div class="dropdown ms-2">
+                                <button class="btn btn-sm btn-outline-light" type="button" data-bs-toggle="dropdown" aria-expanded="false">More</button>
 
-                        <div class="dropdown ms-2">
-                            <button class="btn btn-sm btn-outline-light" type="button" data-bs-toggle="dropdown" aria-expanded="false">More</button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="#">Open</a></li>
+                                    <li><a class="dropdown-item" href="#">Download</a></li>
+                                    <li><div class="dropdown-item" data-bs-toggle="modal" data-bs-target="#fileDetailsModal{{file.id}}">Details<div/></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item text-danger" href="#">Delete</a></li>
+                                </ul>
+                            </div>
 
-                            <ul class="dropdown-menu dropdown-menu-end">
-                                <li><a class="dropdown-item" href="#">Open</a></li>
-                                <li><a class="dropdown-item" href="#">Download</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item text-danger" href="#">Delete</a></li>
-                            </ul>
-                        </div>
+                            <div class="modal fade" id="fileDetailsModal{{file.id}}">
+                                <div class="modal-dialog">
+                                    <div class="modal-content card">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">File details</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="card-body">
+                                            <div><strong>name:</strong>       {{file.name}}</div>
+                                            <div><strong>owner:</strong>      {{file.owner.name}}</div>
+                                            <div><strong>group:</strong>      {{file.group.name}}</div>
+                                            <div><strong>created_at:</strong> {{file.created_at}}</div>
+                                            <div><strong>accessed_at:</strong> {{file.accessed_at}}</div>
+                                            <div><strong>modified_at:</strong> {{file.modified_at}}</div>
+                                            <div><strong>size:</strong>       {{file.size}}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% elseif file.directory %}
+                            <div class="d-flex align-items-center justify-content-between px-3 py-3 border-bottom border-secondary file-item">
+                            <div class="text-truncate" style="min-width: 0;">
+                                <div class="text-truncate" title="{{ file.name }}">{{ file.name }}</div>
+                                {# <small class="text-white-50">{{ file.document.mime_type }}</small> #}
+                            </div>
 
+
+                            <div class="dropdown ms-2">
+                                <button class="btn btn-sm btn-outline-light" type="button" data-bs-toggle="dropdown" aria-expanded="false">More</button>
+
+
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="#">Open</a></li>
+                                    {# <li><a class="dropdown-item" href="#">Download</a></li> #}
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item text-danger" href="#">Delete</a></li>
+                                    <li><a class="dropdown-item" href="#">Details</a></li>
+                                </ul>
+                            </div>
+                        {% endif %}
                     </div>
-
-                {% else %}
+                    {% else %}
 
                     <div class="text-center text-white-50 py-5">
-                        <div class="fw-semibold mb-1">No files found</div>
+                        <div class="fw-semibold mb-1">No files or directories found</div>
                         <small>Upload a file to get started.</small>
                     </div>
 
@@ -158,6 +198,5 @@
             </div>
         </div>
     </div>
-
 {% endblock %}
 

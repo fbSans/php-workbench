@@ -3,6 +3,7 @@
 namespace Documents\Models;
 
 use Base\Model;
+use Users\Models\Group;
 use Users\Models\User;
 
 class File extends Model{
@@ -28,6 +29,12 @@ class File extends Model{
             'type' => 'belongsTo',
             'local' => 'id',
             'foreign' => 'owner_id',
+        ],
+        'group' => [
+            'model' => Group::class,
+            'type' => 'belongsTo',
+            'local' => 'id',
+            'foreign' => 'group_id',
         ],
         'document' => [
             'type' => 'hasOne',
