@@ -46,7 +46,7 @@
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li><a class="dropdown-item" href="#">Open</a></li>
                                     <li><a class="dropdown-item" href="#">Download</a></li>
-                                    <li><div class="dropdown-item" data-bs-toggle="modal" data-bs-target="#fileDetailsModal{{file.id}}">Details<div/></li>
+                                    <li><div class="btn dropdown-item" data-bs-toggle="modal" data-bs-target="#fileDetailsModal{{file.id}}">Details<div/></li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item text-danger" href="#">Delete</a></li>
                                 </ul>
@@ -88,8 +88,28 @@
                                     {# <li><a class="dropdown-item" href="#">Download</a></li> #}
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item text-danger" href="#">Delete</a></li>
-                                    <li><a class="dropdown-item" href="#">Details</a></li>
+                                    <li><div class="btn dropdown-item" data-bs-toggle="modal" data-bs-target="#fileDetailsModal{{file.id}}">Details<div/></li>
                                 </ul>
+                            </div>
+
+                            <div class="modal fade" id="fileDetailsModal{{file.id}}">
+                                <div class="modal-dialog">
+                                    <div class="modal-content card">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">File details</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="card-body">
+                                            <div><strong>name:</strong>       {{file.name}}</div>
+                                            <div><strong>owner:</strong>      {{file.owner.name}}</div>
+                                            <div><strong>group:</strong>      {{file.group.name}}</div>
+                                            <div><strong>created_at:</strong> {{file.created_at}}</div>
+                                            <div><strong>accessed_at:</strong> {{file.accessed_at}}</div>
+                                            <div><strong>modified_at:</strong> {{file.modified_at}}</div>
+                                            <div><strong>size:</strong>       {{file.size}}</div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         {% endif %}
                     </div>
