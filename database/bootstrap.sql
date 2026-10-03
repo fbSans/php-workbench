@@ -1,10 +1,10 @@
-DROP DATABASE IF EXISTS sgd_lean_db;
+DROP DATABASE IF EXISTS temp_db;
 
-CREATE DATABASE sgd_lean_db
+CREATE DATABASE temp_db
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
 
-USE sgd_lean_db;
+USE temp_db;
 
 
 CREATE TABLE users (
@@ -19,7 +19,7 @@ CREATE TABLE users (
 
 
 
-CREATE TABLE groups (
+CREATE TABLE `groups` (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     created_by INT UNSIGNED NOT NULL,
@@ -38,17 +38,17 @@ CREATE TABLE group_users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     deleted_at TIMESTAMP NULL,
 
-    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (group_id) REFERENCES `groups`(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-CREATE FUNCTION system_email() RETURNS TEXT DETERMINISTIC RETURN 'system@sgd.local'
-CREATE FUNCTION system_name() RETURNS TEXT DETERMINISTIC RETURN 'system'
+CREATE FUNCTION system_email() RETURNS TEXT DETERMINISTIC RETURN 'system@sgd.local';
+CREATE FUNCTION system_name() RETURNS TEXT DETERMINISTIC RETURN 'system';
 CREATE FUNCTION system_id() RETURNS INT UNSIGNED DETERMINISTIC RETURN (select id FROM users where email = system_email());
-CREATE FUNCTION system_group_id() RETURNS INT UNSIGNED DETERMINISTIC RETURN (select id FROM groups where name=system_name());
+CREATE FUNCTION system_group_id() RETURNS INT UNSIGNED DETERMINISTIC RETURN (select id FROM `groups` where name=system_name());
 
 INSERT INTO users (name, email, password) VALUES (system_name(), system_email(), '');
-INSERT INTO groups (name, created_by) values (system_name(), system_id());
+INSERT INTO `groups` (name, created_by) values (system_name(), system_id());
 INSERT INTO group_users (group_id, user_id) values (system_group_id(), system_id());
 
 
@@ -68,7 +68,7 @@ CREATE TABLE files (
     deleted_at TIMESTAMP NULL,
 
     FOREIGN KEY (owner_id) REFERENCES users(id),
-    FOREIGN KEY (group_id) REFERENCES groups(id)
+    FOREIGN KEY (group_id) REFERENCES `groups`(id)
 );
 
 CREATE TABLE directories (
@@ -93,14 +93,14 @@ CREATE TABLE documents (
 -- all                      0b111111 = 63
 
 -- By default will enable read
--- Now shares are made only with groups. But every user has a dedicated group
+-- Now shares are made only with `groups`. But every user has a dedicated group
 CREATE TABLE group_user_shares (
     group_id INT UNSIGNED NOT NULL,
     file_id INT UNSIGNED NOT NULL,
     permission INT DEFAULT 4,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (group_id, file_id),
-    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (group_id) REFERENCES `groups`(id) ON DELETE CASCADE,
     FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
 );
 

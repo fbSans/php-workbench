@@ -19,7 +19,6 @@ class DocumentController extends Controller
 {
     public function index(Request $request)
     {
-        $now = time();
         $page = $request->input('page', 1);
 
         
@@ -55,14 +54,16 @@ class DocumentController extends Controller
         Session::unset('data');
 
         $parent_id = Session::get('parent_id');
+        $csrf_token = Session::get('csrf_token');
 
         return view(
             'documents/index.html.twig',
             compact(
+                'csrf_token',
                 'files',
                 'error_message',
                 'success_message',
-                'parent_id'
+                'parent_id',
             )
         );
     }

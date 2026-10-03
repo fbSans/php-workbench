@@ -31,17 +31,14 @@ class UserController {
         if(!valid_email($email)) {
             $context['errors']['message'] = 'Invalid format for email. got "' . escape_html($email) . '"';
         } else {
-            $page = 1;
-            $user = User::fetchPage($page, 1, ['email'=> $email])['items'][0];
-            
+            $user = User::first(['email'=> $email]);
             if(!$user){
                 $context['errors']['message'] = 'Invalid email or password';
             }
                 
-                
+    
             $verified = true;
-           
-            
+
             if(!password_verify($request->input('password'), $user->password)) {
                 $context['errors']['message'] = 'Invalid email or password';
                 $verified = false;

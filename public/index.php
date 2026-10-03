@@ -4,7 +4,7 @@ require_once dirname(__DIR__) . '/vendor/autoload.php';
 // Register application routes
 require_once dirname(__DIR__) . '/routes/web.php';
 
-use Routes\Route;
+use Base\Route;
 use Init\Init;
 
 Init::init();

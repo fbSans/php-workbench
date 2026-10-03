@@ -1,0 +1,71 @@
+{% extends "base.html.twig" %}
+
+{% block content %}
+    <div class="row">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="mb-3">Profile</h5>
+
+                <div class="mb-3">
+                    <label>Name:</label>
+                    {{ user.name }}
+                </div>
+
+                <div class="mb-3">
+                    <label>Email:</label>
+                    {{ user.email }}
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="mb-3">Other Information</h5>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <h5 class="mb-3"> Change Password </h5>
+
+            <form method="POST" action="/changePassword">
+                <input type="hidden" name="csrf_token" value={{ csrf_token }}>
+                
+                <div class="mb-3">
+                    <label for="current_password">Current Password</label>
+                    <input 
+                        type="password" 
+                        name="current_password" 
+                        id="current_password" 
+                        class="form-control" 
+                        required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="new_password">New Password</label>
+                    <input 
+                            type="password" 
+                            name="new_password" 
+                            id="new_password" 
+                            class="form-control" 
+                            required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="new_password_confirmation">Confirm New Password</label>
+                    <input 
+                            type="password" 
+                            name="new_password_confirmation" 
+                            id="new_password_confirmation" 
+                            class="form-control" 
+                            required>
+                </div>
+
+                <button class="btn btn-warning">
+                    Change Password
+                </button>
+            </form>
+        </div>
+    </div>
+{% endblock %}

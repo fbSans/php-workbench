@@ -1,6 +1,6 @@
 <?php
 
-namespace Routes;
+namespace Base;
 
 use Base\MiddlewarePipeline;
 use Base\Request;

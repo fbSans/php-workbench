@@ -14,8 +14,8 @@ class Config {
         
         self::$config = [
             'DB_ADAPTER' => $_ENV['DB_ADAPTER'] ?? 'mysql',
-            'DB_NAME' => $_ENV['DB_NAME'] ?? 'sgd_lean_db',
-            'DB_USER' => $_ENV['DB_USER'] ?? 'root',
+            'DB_NAME' => $_ENV['DB_NAME'] ?? '',
+            'DB_USER' => $_ENV['DB_USER'] ?? 'dev',
             'DB_PASSWORD' => $_ENV['DB_PASSWORD'] ?? '',
             'DB_HOST' => $_ENV['DB_HOST'] ?? '127.0.0.1',
 
@@ -28,11 +28,15 @@ class Config {
             'UPLOAD_MAX_SIZE' => 40 * 1024 * 1024,
             'STORAGE_DIR_PERMISSIONS' => 0775,
         ];
+
+        foreach($_ENV as $key => $value){
+            self::$config[$key] = $value;
+        }
     }
         
     public static function get(string $name, mixed $default = null): mixed
     {
-        if(self::$config == null) {
+        if(self::$config === null) {
             self::init();
         }
         return self::$config[$name] ?? $default;
