@@ -1,0 +1,31 @@
+{% extends "base.html.twig" %}
+
+{% block content %}
+    {% if url is defined %}
+        {% set value = url %}
+    {% else %}
+        {% set value = "" %}
+    {% endif %}
+    <div class="card">
+        <div class="card-body">
+            <h5>Generate QrCode</h5>
+            <form action="qrcode" class="mb-3">
+                <div class="input-group">
+                    <input 
+                    type="url" 
+                    name="uri_code" 
+                    id="uri_code" 
+                    class="form-control"
+                    value='{{value}}'
+                >
+                    <button type="submit" class="btn btn-secondary">Generate</button>
+                </div>
+            </form>
+            
+            {% if url is defined %}
+            <img src="/url_qrcode?uri_code={{url}}" alt="generated qrcode" width="300px" height="300px">        
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}
+
