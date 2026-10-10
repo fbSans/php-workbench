@@ -21,13 +21,13 @@ class DocumentController extends Controller
     {
         $page = $request->input('page', 1);
 
-        
+
         $files = File::fetchPage($page, 20, ['parent_id' => $request->input('parent_id')]);
-        foreach($files['items'] as $file){
+        foreach ($files['items'] as $file) {
             /** @var File $file */
             $file->update(['accessed_at' => date('Y-m-d H:i:s')]);
         }
-        
+
         $files['items'] = File::load(
             $files['items'],
             ['document', 'directory'],
@@ -99,5 +99,27 @@ class DocumentController extends Controller
             $make_submodel,
             $unwind
         );
+    }
+
+    public function download(int $id)
+    {
+        $document = Document::find($id);
+       
+        if(!$document || !$document->file) {
+            Session::set('errors', [
+                'message' => 'Could not find the requested document.',
+            ]);
+            return Response::redirect('/documents');
+        }
+
+        $file = $document->file;
+        $mime_type = $document->mime_type;
+        $size = $file->size;
+        $storage_name = $file->storage_name;
+        $name = $file->name;
+
+
+        Storage::download($storage_name, 'documents', $name, $mime_type, $size);
+        exit;
     }
 }

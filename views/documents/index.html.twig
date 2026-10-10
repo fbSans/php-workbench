@@ -3,13 +3,13 @@
 {% block content %}
 
     <!-- Toolbar -->
-    <div class="container bg-light text-dark p-3 mb-3 rounded-3 px-4 shadow-sm">
+    <div class="container bg-secondary text-dark p-3 mb-3 rounded-3 px-4 shadow-sm">
         <div class="d-flex justify-content-between align-items-center">
             <h1 class="h4 mb-0">Document Management</h1>
 
             <div class="d-flex gap-2">
                 <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadFileModal">Upload File</button>
-                <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#uploadFolderModal">New Folder</button>
+                <button type="button" class="btn bg-dark btn-outline-primary" data-bs-toggle="modal" data-bs-target="#uploadFolderModal">New Folder</button>
             </div>
         </div>
     </div>
@@ -29,7 +29,7 @@
             </div>
 
             <!-- File list -->
-            <div class="bg-secondary bg-opacity-25 rounded-3 overflow-hidden">
+            <div class="bg-secondary bg-opacity-25 rounded-3">
 
                 {% for file in files.items %}
                     {% if file.document %}                   
@@ -45,7 +45,7 @@
 
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li><a class="dropdown-item" href="#">Open</a></li>
-                                    <li><a class="dropdown-item" href="#">Download</a></li>
+                                    <li><a class="dropdown-item" href="/document/download/{{file.id}}">Download</a></li>
                                     <li><div class="btn dropdown-item" data-bs-toggle="modal" data-bs-target="#fileDetailsModal{{file.id}}">Details<div/></li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item text-danger" href="#">Delete</a></li>

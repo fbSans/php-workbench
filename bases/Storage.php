@@ -3,6 +3,8 @@
 namespace Base;
 
 use Config\Config;
+use RuntimeException;
+
 use function Helpers\join_paths;
 
 class Storage
@@ -260,5 +262,43 @@ class Storage
     public static function unlinkFile(string $filepath): bool
     {
         return unlink($filepath);
+    }
+
+    public static function storagePath(string ...$parts){
+        $storage_dir = Config::get('STORAGE_DIR');
+        return join_paths($storage_dir, ...$parts); //Clean this properly
+    }
+
+    public static function download(
+            string $starage_name,
+            string $storage_subfolder = 'tmp',
+            string $name = 'document',             
+            string $mime_type = 'text/plain', // change to binary
+            ?int $size = null,                // will get in the filesyste,
+        )
+    {
+        $path = join_paths($storage_subfolder, $starage_name);
+        if(!self::exists($path)) {
+            throw new \RuntimeException("Could not find the specified file.");
+        }
+
+        $path = self::storagePath($path);
+
+        if(!$size) {
+            $size = filesize($path);
+        }
+
+        http_response_code(200);
+        header('Content-Description: File Transfer');
+        header('Content-Type: ' . $mime_type);
+        header('Content-Disposition: attachment; filename=' . $name);
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate');
+        header('Pragma: public');
+        header('Content-Length:' . $size);
+        header('Accept-Ranges: bytes');
+        
+        readfile($path);
+        return;
     }
 }

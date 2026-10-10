@@ -6,7 +6,7 @@
     {% else %}
         {% set value = "" %}
     {% endif %}
-    <div class="card">
+    <div class="card bg-secondary">
         <div class="card-body">
             <h5>Generate QrCode</h5>
             <form action="qrcode" class="mb-3">
@@ -18,7 +18,7 @@
                     class="form-control"
                     value='{{value}}'
                 >
-                    <button type="submit" class="btn btn-secondary">Generate</button>
+                    <button type="submit" class="btn btn-dark">Generate</button>
                 </div>
             </form>
             
