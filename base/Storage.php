@@ -301,4 +301,36 @@ class Storage
         readfile($path);
         return;
     }
+
+    public function open( string $starage_name,
+            string $storage_subfolder = 'tmp',
+            string $name = 'document',             
+            string $mime_type = 'text/plain', // change to binary
+            ?int $size = null,                // will get in the filesyste,
+    )
+    {
+        $path = join_paths($storage_subfolder, $starage_name);
+        if(!self::exists($path)) {
+            throw new \RuntimeException("Could not find the specified file.");
+        }
+
+        $path = self::storagePath($path);
+
+        if(!$size) {
+            $size = filesize($path);
+        }
+
+        ob_clean();
+        flush();
+
+        http_response_code(200);
+        header('Content-Description: Open File');
+        header('Content-Type: ' . $mime_type);
+        header('Content-Disposition: inline; filename=' . $name);
+        header('Content-Transfer-Encoding: binary');
+        header('Accept-Ranges: bytes');
+        
+        readfile($path);
+        return;
+    }
 }
