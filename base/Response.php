@@ -33,4 +33,18 @@ class Response {
             'Content-Type' => 'text/plain; charset=UTF-8',
         ]);
     }
+
+    public static function json(mixed $content, int $status): static 
+    {
+        return new static (json_encode($content), $status, [
+            'Content-Type' => 'application/json'
+        ]);
+    }
+
+    public static function html(mixed $content, int $status)
+    {
+        return new static($content, $status, [
+            'Content-Type' => 'text/html; charset=UTF-8',
+        ]);
+    }
 }

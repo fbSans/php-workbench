@@ -219,10 +219,11 @@ function input(
 | Response helpers
 |--------------------------------------------------------------------------
 */
-function view(string $template, array $data = []): Response
+function view(string $template, array $data = [], int $status = 200): Response
 {
     return new Response(
-        View::render($template, $data)
+        View::render($template, $data),
+        $status
     );
 }
 

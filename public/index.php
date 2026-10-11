@@ -4,8 +4,11 @@
 // Register application routes
 require_once dirname(__DIR__) . '/routes/web.php';
 
+use Base\Response;
 use Base\Route;
 use Init\Init;
+
+use function Helpers\view;
 
 Init::init();
 
@@ -16,11 +19,10 @@ $response = Route::dispatch(
 );
 
 if ($response === null) {
-    http_response_code(404);
-    echo '404 Not Found';
-    exit;
+    $response =  view('error404.html.twig', ['error_message' => '404 Not Found'], status: 404);
 }
 
 
 
 $response->send();
+exit;
