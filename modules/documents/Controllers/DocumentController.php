@@ -122,4 +122,26 @@ class DocumentController extends Controller
         Storage::download($storage_name, 'documents', $name, $mime_type, $size);
         exit;
     }
+
+    public function open(int $id)
+    {
+        $document = Document::find($id);
+       
+        if(!$document || !$document->file) {
+            Session::set('errors', [
+                'message' => 'Could not find the requested document.',
+            ]);
+            return Response::redirect('/documents');
+        }
+
+        $file = $document->file;
+        $mime_type = $document->mime_type;
+        $size = $file->size;
+        $storage_name = $file->storage_name;
+        $name = $file->name;
+
+
+        Storage::open($storage_name, 'documents', $name, $mime_type, $size);
+        exit;
+    }
 }

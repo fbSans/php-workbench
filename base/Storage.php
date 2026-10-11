@@ -302,7 +302,7 @@ class Storage
         return;
     }
 
-    public function open( string $starage_name,
+    public static function open( string $starage_name,
             string $storage_subfolder = 'tmp',
             string $name = 'document',             
             string $mime_type = 'text/plain', // change to binary
@@ -319,9 +319,6 @@ class Storage
         if(!$size) {
             $size = filesize($path);
         }
-
-        ob_clean();
-        flush();
 
         http_response_code(200);
         header('Content-Description: Open File');
