@@ -206,12 +206,12 @@ abstract class Model
         );
     }
 
-    public function toArray(): array
+    public function toArray(bool $include_hidden = false): array
     {
         $result = [];
 
         foreach ($this->attributes as $key => $value) {
-            if (in_array($key, $this->hidden, true)) {
+            if (!$include_hidden && in_array($key, $this->hidden, true)) {
                 continue;
             }
 

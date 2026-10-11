@@ -83,4 +83,17 @@ class DirectoryController
             $make_submodel,
         );
     }
+
+    public function open(int $id)
+    {
+        if($id < 0){
+            Session::unset('parent_id');
+        } else {
+            if(Directory::find($id)) Session::set('parent_id', $id);
+        }
+
+        echo Session::get('parent_id');
+    
+        return Response::redirect('/documents');
+    }
 }

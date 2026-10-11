@@ -15,7 +15,7 @@ class FileController
 {
     public function save(Request $request, array $metadata, ?callable $make_submodel = null, ?callable $unwind = null): Response
     {
-        $parent_id = $request->input('parent_id', null);
+        $parent_id = $request->input('parent_id') ?? Session::get('parent_id');
         $parent_group_id = null;
         if($parent_id) {
             $parent = Directory::find($parent_id);

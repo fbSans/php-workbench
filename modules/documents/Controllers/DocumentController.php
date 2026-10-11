@@ -21,8 +21,9 @@ class DocumentController extends Controller
     {
         $page = $request->input('page', 1);
 
+        $parent_id = $request->input('parent_id') ?? Session::get('parent_id');
 
-        $files = File::fetchPage($page, 20, ['parent_id' => $request->input('parent_id')]);
+        $files = File::fetchPage($page, 20, ['parent_id' => $parent_id]);
         foreach ($files['items'] as $file) {
             /** @var File $file */
             $file->update(['accessed_at' => date('Y-m-d H:i:s')]);
@@ -53,7 +54,6 @@ class DocumentController extends Controller
         Session::unset('errors');
         Session::unset('data');
 
-        $parent_id = Session::get('parent_id');
         $csrf_token = Session::get('csrf_token');
 
         return view(

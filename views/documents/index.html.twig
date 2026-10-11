@@ -24,8 +24,16 @@
                     <h2 class="h5 mb-1">Files &amp; Folders</h2>
                     <small class="text-white-50">Your documents</small>
                 </div>
-
-                <button type="button" class="btn btn-sm btn-outline-light" onclick="window.location.reload()">Refresh</button>
+                <div>
+                    {% if parent_id is defined and parent_id %}
+                        {% if file.parent_id  %}
+                            <a class="btn btn-sm btn-outline-light" href="/directory/open/{{file.id}}">Back</a>
+                        {% else %}
+                            <a class="btn btn-sm btn-outline-light" href="/directory/open/-1">Back</a>
+                        {% endif %}
+                    {% endif %}
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="window.location.reload()">Refresh</button>
+                </div>
             </div>
 
             <!-- File list -->
@@ -84,7 +92,7 @@
 
 
                                 <ul class="dropdown-menu dropdown-menu-end">
-                                    <li><a class="dropdown-item" href="#">Open</a></li>
+                                    <li><a class="dropdown-item" href="/directory/open/{{file.id}}">Open</a></li>
                                     {# <li><a class="dropdown-item" href="#">Download</a></li> #}
                                     <li><hr class="dropdown-divider"></li>
                                     <li><a class="dropdown-item text-danger" href="#">Delete</a></li>
@@ -179,7 +187,7 @@
                     </div>
 
                     {% if parent_id is defined and parent_id %}
-                        <input type="hidden" value="{{ parent_id }}">
+                        <input type="hidden" name="parent_id" value="{{ parent_id }}">
                     {% endif %}
                 </form>
 

@@ -20,6 +20,7 @@ Route::post('/document/save', [DocumentController::class, 'save'])->middleware('
 Route::post('/directory/save', [DirectoryController::class, 'save'])->middleware('auth', 'csrf');
 Route::get('/document/download/{id}', [DocumentController::class, 'download'])->middleware('auth');
 Route::get('/document/open/{id}', [DocumentController::class, 'open'])->middleware('auth');
+Route::get('/directory/open/{id}', [DirectoryController::class, 'open'])->middleware('auth');
 
 Route::get('/profile', [ProfileController::class, 'index'])->middleware('auth');
 Route::post('/changePassword', [ProfileController::class, 'changePassword'])->middleware('auth', 'csrf');
