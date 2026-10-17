@@ -1,10 +1,9 @@
 <?php
 
-    require_once dirname(__DIR__) . '/vendor/autoload.php';
+require_once dirname(__DIR__) . '/vendor/autoload.php';
 // Register application routes
 require_once dirname(__DIR__) . '/routes/web.php';
 
-use Base\Response;
 use Base\Route;
 use Init\Init;
 
@@ -19,7 +18,7 @@ $response = Route::dispatch(
 );
 
 if ($response === null) {
-    $response =  view('error404.html.twig', ['error_message' => '404 Not Found'], status: 404);
+    $response = view('error404.html.twig', ['error_message' => '404 Not Found'], status: 404);
 }
 
 
