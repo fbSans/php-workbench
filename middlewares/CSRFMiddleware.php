@@ -13,7 +13,7 @@ class CSRFMiddleware implements Middleware
     #[Override]
     public function handle(Request $request, callable $next): Response
     {
-        $response = $next($request);
+        
 
         if ( !$request->has('csrf_token') ||
              !Session::has('csrf_token') || 
@@ -22,6 +22,7 @@ class CSRFMiddleware implements Middleware
             return Response::redirect('/login');
         }
 
+        $response = $next($request);
 
         return $response;
     }
