@@ -27,6 +27,7 @@ The project uses server-side rendering with Twig, with application logic organis
 
 - PHP 8.2+
 - Composer
+- PDO (MySQL/MariaDB)
 - Twig 3
 - Bootstrap 5
 - PHP dotenv
