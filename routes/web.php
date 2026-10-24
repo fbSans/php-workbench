@@ -27,10 +27,3 @@ Route::post('/changePassword', [ProfileController::class, 'changePassword'])->mi
 
 Route::get('/qrcode', [QRCodeController::class, 'index']);
 Route::get('/url_qrcode', [QRCodeController::class, 'generate_uri_code']);
-
-Route::get('/debug', function(){
-    $document = Document::find(1);
-    $file = $document->file;
-    var_dump($file->name);
-    exit;
-});
