@@ -1,5 +1,5 @@
 {
-    "name": "dms/dms_lean",
+    "name": "fbsans/php_workbench",
     "type": "project",
     "autoload": {
         "psr-4": {
@@ -12,7 +12,7 @@
             "Routes\\": "routes/",
             "Configs\\": "configs/",    
             "Init\\":  "init/",
-            "Middleware\\": "middlewares"    
+            "Middleware\\": "middlewares/"    
         },
         "files": [
             "helpers/helpers.php",
