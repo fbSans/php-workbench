@@ -39,13 +39,13 @@ class UserController {
     
             $verified = true;
 
-            if(!password_verify($request->input('password'), $user->password)) {
+            if($user && !password_verify($request->input('password'), $user->password)) {
                 $context['errors']['message'] = 'Invalid email or password';
                 $verified = false;
             } 
         }
 
-        if($verified) {
+        if($user && $verified) {
             assert(isset($user));
             Session::set('user_id', $user->id);
             Session::set('csrf_token', bin2hex(random_bytes(32)));
