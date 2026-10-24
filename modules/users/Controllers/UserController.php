@@ -28,6 +28,7 @@ class UserController {
         $email = $request->input('email');
         $email = clean_input($email);
         $verified = false;
+        $user = null;
         if(!valid_email($email)) {
             $context['errors']['message'] = 'Invalid format for email. got "' . escape_html($email) . '"';
         } else {
