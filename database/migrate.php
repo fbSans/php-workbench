@@ -16,6 +16,8 @@ function fresh_migrate()
             echo "[INFO] Database migration ran successfully!\n";
         }
         $user = User::first();
+
+        echo $user->name;
         if($user) {
             /** @var User $user */
             $password = password_hash(Config::get('system_initial_password', ''), PASSWORD_DEFAULT); 
